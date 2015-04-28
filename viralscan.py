@@ -293,8 +293,45 @@ def diamond_view(daa, out_file, verbose=False):
     return out_file
 
 
-def viralscan(fasta, output, query, name, threads, verbose, db, num_alignments,
-              evalue):
+def alignment_coverage(daa, tsv, out_file, identity_threshold=50.0, verbose=False):
+    """
+    daa is diamond alignment archive
+    tsv is diamond tab view file
+    out_file is a tsv of chrome, 1-based position, count
+    """
+
+    def _hit_set_from_tsv(tsv, identity_threshold=50.0):
+        hits = set()
+        for l in open(tsv):
+            l = l.strip().split("\t")
+            if float(l[2]) > identity_threshold:
+                hits.add(l[0])
+        return hits
+
+    def _daa_to_sam(sam):
+        cmd =
+        t = tempfile.T
+
+        os.remove(t)
+
+    if file_exists(out_file):
+        return out_file
+
+    if verbose:
+        print("Finding coverages per contig based coverage on hits above %f%%" % identity_threshold)
+
+    with file_transaction(out_file) as tx_out_file:
+        # create dictionary of passing hits
+        passing_hits = _hit_set_from_tsv(tsv, identity_threshold)
+        # create a sam from daa
+        sam = daa_to_sam(daa)
+        # create new filtered sam
+        # convert sam to bam
+        # bedtools genomecov
+    return out_file
+
+
+def viralscan(fasta, output, query, name, threads, identity_threshold, verbose, db, num_alignments, evalue):
     if name is None:
         name = fasta.partition('.')[0]
 
@@ -313,12 +350,12 @@ def viralscan(fasta, output, query, name, threads, verbose, db, num_alignments,
                            os.path.join(output, name + "_gc_content.tsv"),
                            verbose)
     # blastp
-    blastp_tsv = blastp(p_proteins, os.path.join(output, name + "_blastp.tsv"),
-                        db, num_alignments, evalue, threads, verbose)
+    #blastp_tsv = blastp(p_proteins, os.path.join(output, name + "_blastp.tsv"),
+    #                    db, num_alignments, evalue, threads, verbose)
     # create database
-    protein_db = make_blastdb(p_proteins, os.path.join(
+    protein_db = make_diamond_db(p_proteins, os.path.join(
         output, "diamond", os.path.basename(p_proteins).partition(".")[0]),
-                              verbose)
+                                 threads, verbose)
     # diamond
     for q in query:
         name = os.path.basename(q).partition(".")[0]
@@ -327,6 +364,10 @@ def viralscan(fasta, output, query, name, threads, verbose, db, num_alignments,
                                      protein_db, threads, verbose)
         diamond_tsv = diamond_view(diamond_daa, os.path.join(output, "diamond",
                                                              name + ".tsv"))
+
+samtools faidx p_proteins
+diamond view -f sam -a diamond/GOSfreshwater.daa | samtools view -Sbht prodigal/AAA015-L03_proteins.fasta.fai - | samtools sort -m 8G - diamond/t
+        # bedtools genomecov -d -ibam diamond/t.bam > diamond/t.tsv
 
 
 def main():
@@ -362,6 +403,7 @@ def main():
                    default=12,
                    type=int,
                    help="Number of threads to use.")
+    p.add_argument('-i', '--identity', default=50, type=float, help="passing blastx percent identity per hit")
     p.add_argument('--verbose', action='store_true')
 
     blasto = p.add_argument_group('BLAST options')

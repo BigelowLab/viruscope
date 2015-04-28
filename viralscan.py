@@ -224,7 +224,10 @@ def blastp(fasta, out_file, db,
               file=sys.stderr)
 
     with file_transaction(out_file) as tx_out_file:
-        cmd = ("blastp -db {db} -query {query} -outfmt '6 ext' "
+        cmd = ("blastp -db {db} -query {query} -outfmt "
+               "'6 qseqid sseqid pident length mismatch gapopen qstart qend \
+                 sstart send evalue bitscore sallseqid score nident positive \
+                 gaps ppos qframe sframe qseq sseq qlen slen salltitles' "
                "-out {out} -num_threads {threads} "
                "-num_alignments {alignments} "
                "-evalue {evalue}").format(db=db,

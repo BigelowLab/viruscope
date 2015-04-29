@@ -8,11 +8,12 @@ python setup.py install
 ```
 
 # Requires
-+ [prodigal](https://github.com/hyattpd/Prodigal)
-+ [tRNAscan-SE](http://selab.janelia.org/tRNAscan-SE/)
-    + Fixing a common issue when installing: http://happykhan.com/getting-trnascan-to-work-on-linux.html
++ [bedtools](https://github.com/arq5x/bedtools2)
 + blastp
 + [diamond](http://ab.inf.uni-tuebingen.de/software/diamond/)
++ [prodigal](https://github.com/hyattpd/Prodigal)
++ [tRNAscan-SE](http://selab.janelia.org/tRNAscan-SE/)
+    + [Fixing](http://happykhan.com/getting-trnascan-to-work-on-linux.html) a common issue when installing
 
 # Usage
 ```

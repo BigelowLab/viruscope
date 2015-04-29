@@ -6,6 +6,7 @@ from __future__ import print_function
 
 import argparse
 import contextlib
+import gzip
 import itertools
 import os
 import shutil
@@ -132,6 +133,19 @@ def prodigal(fasta, out_files, verbose=False):
     return out_files
 
 
+def create_fasta_index(fasta, verbose=False):
+    out_file = fasta + ".fai"
+    if file_exists(out_file):
+        return out_file
+
+    if verbose:
+        print("Creating an index of", fasta, file=sys.stderr)
+
+    cmd = "samtools faidx {fasta}".format(fasta=fasta)
+    subprocess.check_call(cmd, shell=True)
+    return out_file
+
+
 def trnascan(fasta, out_file, verbose=False):
     if file_exists(out_file):
         return out_file
@@ -198,13 +212,16 @@ def gc_content(fasta, out_file, verbose=False):
 
     header = ["SEQUENCE_NAME", "POSITION", "SKEW", "CONTENT"]
     with file_transaction(out_file) as tx_out_file:
-        with open(tx_out_file, 'w') as wfh, open(fasta) as rfh:
+        with open(tx_out_file.rpartition(".")[0],
+                  'w') as wfh, open(fasta) as rfh:
             print(*header, sep="\t", file=wfh)
             for name, seq in readfa(rfh):
                 for point, skew, content in gc_skew_and_content(seq, 500):
                     print("%s\t%i\t%0.3f\t%0.3f" %
                           (name, point, skew, content),
                           file=wfh)
+        cmd = "gzip {tsv}".format(tsv=tx_out_file.rpartition(".")[0])
+        subprocess.check_call(cmd, shell=True)
     return out_file
 
 
@@ -246,8 +263,7 @@ def make_diamond_db(fasta, db, threads=1, verbose=False):
         return db
 
     if verbose:
-        print("Creating DIAMOND database %s for %s" % (db, fasta),
-              file=sys.stderr)
+        print("Creating DIAMOND database for", fasta, file=sys.stderr)
 
     with file_transaction(out_file) as tx_out_file:
         cmd = ("diamond makedb --in {fasta} -d {db} "
@@ -287,51 +303,88 @@ def diamond_view(daa, out_file, verbose=False):
               file=sys.stderr)
 
     with file_transaction(out_file) as tx_out_file:
-        cmd = ("diamond view -a {daa} -o {out}").format(daa=daa,
-                                                        out=tx_out_file)
+        nongz = tx_out_file.rpartition(".")[0]
+        cmd = ("diamond view -a {daa} -o {out}").format(daa=daa, out=nongz)
+        subprocess.check_call(cmd, shell=True)
+        cmd = "gzip {tsv}".format(tsv=nongz)
         subprocess.check_call(cmd, shell=True)
     return out_file
 
 
-def alignment_coverage(daa, tsv, out_file, identity_threshold=50.0, verbose=False):
+def alignment_coverage(daa, tsv, fasta_index, out_file,
+                       identity=50.0,
+                       verbose=False):
     """
     daa is diamond alignment archive
     tsv is diamond tab view file
     out_file is a tsv of chrome, 1-based position, count
     """
 
-    def _hit_set_from_tsv(tsv, identity_threshold=50.0):
+    def _hit_set_from_tsv(tsv, identity=50.0):
         hits = set()
-        for l in open(tsv):
-            l = l.strip().split("\t")
-            if float(l[2]) > identity_threshold:
-                hits.add(l[0])
+        with gzip.open(tsv) as fh:
+            for l in fh:
+                l = l.strip().split("\t")
+                if float(l[2]) > identity:
+                    hits.add("%s:%s" % (l[0], l[1]))
         return hits
 
-    def _daa_to_sam(sam):
-        cmd =
-        t = tempfile.T
+    def _daa_to_sam(daa, sam):
+        cmd = "diamond view -f sam -a {daa} -o {sam}".format(daa=daa, sam=sam)
+        subprocess.check_call(cmd, shell=True)
+        return sam
 
-        os.remove(t)
+    def _filter_sam(sam, hits, out_file):
+        with open(out_file, 'w') as filtered_sam, open(sam) as unfiltered_sam:
+            for l in unfiltered_sam:
+                l = l.strip()
+                if l.startswith("@"):
+                    print(l, file=filtered_sam)
+                    continue
+                l = l.split("\t")
+                if "%s:%s" % (l[0], l[2]) in hits:
+                    print(*l, sep="\t", file=filtered_sam)
+        return out_file
+
+    def _sam_to_bam(sam, idx, out_file):
+        cmd = ("samtools view -Sbht {index} {sam} "
+               "| samtools sort -m 8G - {bam}"
+              ).format(index=idx,
+                       sam=sam,
+                       bam=out_file.rpartition(".")[0])
+        subprocess.check_call(cmd, shell=True)
+        return out_file
 
     if file_exists(out_file):
         return out_file
 
     if verbose:
-        print("Finding coverages per contig based coverage on hits above %f%%" % identity_threshold)
+        print("Finding coverages per contig based coverage on hits above %f%%"
+              % identity)
 
     with file_transaction(out_file) as tx_out_file:
+        tmpdir = os.path.dirname(tx_out_file)
+        filtered_sam = os.path.join(tmpdir, "filtered.sam")
         # create dictionary of passing hits
-        passing_hits = _hit_set_from_tsv(tsv, identity_threshold)
+        passing_hits = _hit_set_from_tsv(tsv, identity)
         # create a sam from daa
-        sam = daa_to_sam(daa)
+        unfiltered_sam = _daa_to_sam(daa, os.path.join(tmpdir,
+                                                       "unfiltered.sam"))
         # create new filtered sam
+        filtered_sam = _filter_sam(unfiltered_sam, passing_hits,
+                                   os.path.join(tmpdir, "filtered.sam"))
         # convert sam to bam
-        # bedtools genomecov
+        bam = _sam_to_bam(filtered_sam, fasta_index,
+                          os.path.join(tmpdir, "filtered.bam"))
+        cmd = "bedtools genomecov -d -ibam {bam} | gzip > {out}".format(
+            bam=bam,
+            out=tx_out_file)
+        subprocess.check_call(cmd, shell=True)
     return out_file
 
 
-def viralscan(fasta, output, query, name, threads, identity_threshold, verbose, db, num_alignments, evalue):
+def viralscan(fasta, output, query, name, threads, identity, verbose, db,
+              num_alignments, evalue):
     if name is None:
         name = fasta.partition('.')[0]
 
@@ -341,33 +394,36 @@ def viralscan(fasta, output, query, name, threads, identity_threshold, verbose, 
                 os.path.join(output, "prodigal", name + "_genes.fasta"),
                 os.path.join(output, "prodigal", name + ".gbk"),
                 os.path.join(output, "prodigal", name + ".scores")], verbose)
+    p_proteins_index = create_fasta_index(p_proteins)
     # tRNAscan-SE
     trna_output = trnascan(fasta, os.path.join(output, "tRNAscan",
                                                name + "-tRNAscan.txt"),
                            verbose)
     # gc content and skew
     gc_output = gc_content(fasta,
-                           os.path.join(output, name + "_gc_content.tsv"),
+                           os.path.join(output, name + "_gc_content.tsv.gz"),
                            verbose)
     # blastp
-    #blastp_tsv = blastp(p_proteins, os.path.join(output, name + "_blastp.tsv"),
-    #                    db, num_alignments, evalue, threads, verbose)
+    blastp_tsv = blastp(p_proteins, os.path.join(output, name + "_blastp.tsv"),
+                        db, num_alignments, evalue, threads, verbose)
     # create database
     protein_db = make_diamond_db(p_proteins, os.path.join(
         output, "diamond", os.path.basename(p_proteins).partition(".")[0]),
                                  threads, verbose)
     # diamond
     for q in query:
-        name = os.path.basename(q).partition(".")[0]
+        qname = os.path.basename(q).partition(".")[0]
         diamond_daa = diamond_blastx(q, os.path.join(output, "diamond",
-                                                     name + ".daa"),
+                                                     qname + ".daa"),
                                      protein_db, threads, verbose)
-        diamond_tsv = diamond_view(diamond_daa, os.path.join(output, "diamond",
-                                                             name + ".tsv"))
-
-samtools faidx p_proteins
-diamond view -f sam -a diamond/GOSfreshwater.daa | samtools view -Sbht prodigal/AAA015-L03_proteins.fasta.fai - | samtools sort -m 8G - diamond/t
-        # bedtools genomecov -d -ibam diamond/t.bam > diamond/t.tsv
+        diamond_tsv = diamond_view(diamond_daa,
+                                   os.path.join(output, "diamond",
+                                                qname + ".tsv.gz"), verbose)
+        coverage_tsv = alignment_coverage(diamond_daa, diamond_tsv,
+                                          p_proteins_index,
+                                          os.path.join(output, "coverage",
+                                                       qname + ".tsv.gz"),
+                                          identity, verbose)
 
 
 def main():
@@ -403,7 +459,10 @@ def main():
                    default=12,
                    type=int,
                    help="Number of threads to use.")
-    p.add_argument('-i', '--identity', default=50, type=float, help="passing blastx percent identity per hit")
+    p.add_argument('-i', '--identity',
+                   default=50,
+                   type=float,
+                   help="passing blastx percent identity per hit")
     p.add_argument('--verbose', action='store_true')
 
     blasto = p.add_argument_group('BLAST options')

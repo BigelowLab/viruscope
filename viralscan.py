@@ -241,6 +241,8 @@ def blastp(fasta, out_file, db,
               file=sys.stderr)
 
     with file_transaction(out_file) as tx_out_file:
+        nongz = tx_out_file.rpartition(".")[0]
+        # FIXME: may need to add a header onto the tabular output
         cmd = ("blastp -db {db} -query {query} -outfmt "
                "'6 qseqid sseqid pident length mismatch gapopen qstart qend \
                  sstart send evalue bitscore sallseqid score nident positive \
@@ -249,11 +251,12 @@ def blastp(fasta, out_file, db,
                "-num_alignments {alignments} "
                "-evalue {evalue}").format(db=db,
                                           query=fasta,
-                                          out=tx_out_file,
+                                          out=nongz,
                                           threads=threads,
                                           alignments=num_alignments,
                                           evalue=evalue)
         subprocess.check_call(cmd, shell=True)
+        subprocess.check_call("gzip {tsv}".format(tsv=nongz), shell=True)
     return out_file
 
 
@@ -404,8 +407,9 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
                            os.path.join(output, name + "_gc_content.tsv.gz"),
                            verbose)
     # blastp
-    blastp_tsv = blastp(p_proteins, os.path.join(output, name + "_blastp.tsv"),
-                        db, num_alignments, evalue, threads, verbose)
+    blastp_tsv = blastp(p_proteins,
+                        os.path.join(output, name + "_blastp.tsv.gz"), db,
+                        num_alignments, evalue, threads, verbose)
     # create database
     protein_db = make_diamond_db(p_proteins, os.path.join(
         output, "diamond", os.path.basename(p_proteins).partition(".")[0]),

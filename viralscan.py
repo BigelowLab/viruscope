@@ -242,19 +242,27 @@ def blastp(fasta, out_file, db,
 
     with file_transaction(out_file) as tx_out_file:
         nongz = tx_out_file.rpartition(".")[0]
-        # FIXME: may need to add a header onto the tabular output
+
+        fields = ["qseqid", "sseqid", "pident", "length", "mismatch",
+                  "gapopen", "qstart", "qend", "sstart", "send", "evalue",
+                  "bitscore", "sallseqid", "score", "nident", "positive",
+                  "gaps", "ppos", "qframe", "sframe", "qseq", "sseq", "qlen",
+                  "slen", "salltitles"]
+
+        with open(nongz, 'w') as fo:
+            print(*fields, sep="\t", file=fo)
+
         cmd = ("blastp -db {db} -query {query} -outfmt "
-               "'6 qseqid sseqid pident length mismatch gapopen qstart qend \
-                 sstart send evalue bitscore sallseqid score nident positive \
-                 gaps ppos qframe sframe qseq sseq qlen slen salltitles' "
-               "-out {out} -num_threads {threads} "
+               "'6 {fields}' "
+               "-num_threads {threads} "
                "-num_alignments {alignments} "
-               "-evalue {evalue}").format(db=db,
-                                          query=fasta,
-                                          out=nongz,
-                                          threads=threads,
-                                          alignments=num_alignments,
-                                          evalue=evalue)
+               "-evalue {evalue} >> {out}").format(db=db,
+                                                   query=fasta,
+                                                   fields=" ".join(fields),
+                                                   threads=threads,
+                                                   alignments=num_alignments,
+                                                   evalue=evalue,
+                                                   out=nongz)
         subprocess.check_call(cmd, shell=True)
         subprocess.check_call("gzip {tsv}".format(tsv=nongz), shell=True)
     return out_file

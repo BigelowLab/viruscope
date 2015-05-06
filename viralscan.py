@@ -13,9 +13,8 @@ import shutil
 import subprocess
 import sys
 import tempfile
-from ConfigParser import SafeConfigParser
 
-__version__ = "0.0.1"
+__version__ = "0.1.0"
 
 
 @contextlib.contextmanager
@@ -615,18 +614,10 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
                                   "YOUR_SAMPLE-tetramer-PC.csv")
 
     # write viralsignals config file
-    signals_cfg = write_signals_conf(os.path.join(output, "plot.cfg"), output,
+    signals_cfg = write_signals_conf(os.path.join(output, "signals.cfg"), output,
                                      name, fasta, gc_output, p_proteins,
                                      blastp_tsv, trna_output, pca_output,
                                      query_results)
-
-# def parse_config(path=None):
-#     config = SafeConfigParser()
-#     if not path:
-#         config.read(os.path.join(os.path.expanduser('~'), '.viralscan'))
-#     else:
-#         config.read(path)
-#     return config
 
 
 def main():

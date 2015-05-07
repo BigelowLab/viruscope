@@ -113,6 +113,13 @@ def file_exists(fnames):
     return True
 
 
+def name_from_path(path):
+    file, ext = os.path.splitext(os.path.basename(path))
+    if ext == ".gz":
+        file, ext = os.path.splitext(file)
+    return file
+
+
 def prodigal(fasta, out_files, verbose=False):
     """Expected order of 4 out_files is proteins, genes, genbank, and score."""
     if file_exists(out_files):
@@ -358,8 +365,8 @@ def alignment_coverage(daa, tsv, fasta_index, out_file,
         return out_file
 
     def _sam_to_bam(sam, idx, out_file):
-        cmd = ("samtools view -Sbht {index} {sam} "
-               "| samtools sort -m 8G - {bam}"
+        cmd = ("samtools view -Sbht {index} {sam} 2> /dev/null "
+               "| samtools sort -m 8G - {bam} 2> /dev/null"
               ).format(index=idx,
                        sam=sam,
                        bam=out_file.rpartition(".")[0])
@@ -369,15 +376,21 @@ def alignment_coverage(daa, tsv, fasta_index, out_file,
     if file_exists(out_file):
         return out_file
 
+    name = name_from_path(daa)
     if verbose:
-        print("Finding coverages per contig based coverage on hits above %f%%"
-              % identity)
+        print("Finding coverages per contig based coverage on hits above",
+              identity, "percent in", name,
+              file=sys.stderr)
 
     with file_transaction(out_file) as tx_out_file:
         tmpdir = os.path.dirname(tx_out_file)
         filtered_sam = os.path.join(tmpdir, "filtered.sam")
         # create dictionary of passing hits
         passing_hits = _hit_set_from_tsv(tsv, identity)
+        if not passing_hits:
+            print("No hits passed filter for", name, file=sys.stderr)
+            return
+
         # create a sam from daa
         unfiltered_sam = _daa_to_sam(daa, os.path.join(tmpdir,
                                                        "unfiltered.sam"))
@@ -407,7 +420,11 @@ def read_count(fasta):
         cmd = '{cat} {fasta} | grep -c "^>" > {out}'.format(cat=cat,
                                                             fasta=fasta,
                                                             out=count_file)
-        subprocess.check_call(cmd, shell=True)
+        try:
+            subprocess.check_call(cmd, shell=True)
+        except subprocess.CalledProcessError:
+            print(fasta, "needs to be in a writable folder!")
+            raise
     for count in open(count_file):
         total = int(count.strip())
         break
@@ -419,6 +436,7 @@ def tetramer_pca(fasta, out_dir, script_path,
                  step_size=200,
                  threads=1,
                  verbose=False):
+    # this is specific to this particular script
     name = os.path.basename(fasta).partition('.')[0]
 
     out_files = [os.path.join(out_dir, name + "-%d-%d-PC.pdf" %
@@ -462,56 +480,71 @@ def write_signals_conf(cfg_file, output, name, input_fasta, gc_output,
                 "#a6cee3", "#fb9a99", "#b2df8a", "#cab2d6", "#fdbf6f"]
     num_cols = len(pallette)
     names = sorted(query_results.keys())
+    # blast tabular output
     comps = []
     for i, (j, k) in enumerate(itertools.combinations(names, 2), start=1):
         if i <= 2:
             comps.append("[Similarity_%d]" % i)
             comps.append("name1=%s" % j)
             comps.append("name2=%s" % k)
-            comps.append("dir1=%s" % os.path.dirname(query_results[j]['tsv']))
-            comps.append("dir2=%s" % os.path.dirname(query_results[k]['tsv']))
-            comps.append("flag1=%s" % os.path.basename(query_results[j]['tsv']))
-            comps.append("flag2=%s" % os.path.basename(query_results[k]['tsv']))
+            comps.append("dir1=%s" % os.path.dirname(query_results[j]['blast']))
+            comps.append("dir2=%s" % os.path.dirname(query_results[k]['blast']))
+            comps.append("flag1=%s" %
+                         os.path.basename(query_results[j]['blast']))
+            comps.append("flag2=%s" %
+                         os.path.basename(query_results[k]['blast']))
             comps.append("log=false")
-            comps.append("color1='%s'" % pallette[names.index(j) % num_cols])
-            comps.append("color2='%s'" % pallette[names.index(k) % num_cols])
+            comps.append('color1=%s' % pallette[names.index(j) % num_cols])
+            comps.append('color2=%s' % pallette[names.index(k) % num_cols])
             comps.append("reads1=%d" % read_count(query_results[j]['fasta']))
             comps.append("reads2=%d" % read_count(query_results[k]['fasta']))
         else:
             comps.append("#[Similarity_%d]" % i)
             comps.append("#name1=%s" % j)
             comps.append("#name2=%s" % k)
-            comps.append("#dir1=%s" % os.path.dirname(query_results[j]['tsv']))
-            comps.append("#dir2=%s" % os.path.dirname(query_results[k]['tsv']))
+            comps.append("#dir1=%s" %
+                         os.path.dirname(query_results[j]['blast']))
+            comps.append("#dir2=%s" %
+                         os.path.dirname(query_results[k]['blast']))
             comps.append("#flag1=%s" %
-                         os.path.basename(query_results[j]['tsv']))
+                         os.path.basename(query_results[j]['blast']))
             comps.append("#flag2=%s" %
-                         os.path.basename(query_results[k]['tsv']))
+                         os.path.basename(query_results[k]['blast']))
             comps.append("#log=false")
-            comps.append("#color1='%s'" % pallette[names.index(j) % num_cols])
-            comps.append("#color2='%s'" % pallette[names.index(k) % num_cols])
+            comps.append('#color1=%s' % pallette[names.index(j) % num_cols])
+            comps.append('#color2=%s' % pallette[names.index(k) % num_cols])
             comps.append("#reads1=%d" % read_count(query_results[j]['fasta']))
             comps.append("#reads2=%d" % read_count(query_results[k]['fasta']))
+    # genomic coverage output
     pileups = []
     for i, j in enumerate(names, start=1):
         if i <= 5:
             pileups.append("[Pileup_%d]" % i)
             pileups.append("name=%s" % j)
-            pileups.append("dir=%s" % os.path.dirname(query_results[j]['tsv']))
+            pileups.append("dir=%s" %
+                           os.path.dirname(query_results[j]['coverage']))
             pileups.append("flag=%s" %
-                           os.path.basename(query_results[j]['tsv']))
+                           os.path.basename(query_results[j]['coverage']))
             pileups.append("log=false")
-            pileups.append("color='%s'" % pallette[names.index(j) % num_cols])
+            pileups.append('color=%s' % pallette[names.index(j) % num_cols])
         else:
             pileups.append("#[Pileup_%d]" % i)
             pileups.append("#name=%s" % j)
-            pileups.append("#dir=%s" % os.path.dirname(query_results[j]['tsv']))
+            pileups.append("#dir=%s" %
+                           os.path.dirname(query_results[j]['coverage']))
             pileups.append("#flag=%s" %
-                           os.path.basename(query_results[j]['tsv']))
+                           os.path.basename(query_results[j]['coverage']))
             pileups.append("#log=false")
-            pileups.append("#color='%s'" % pallette[names.index(j) % num_cols])
+            pileups.append('#color=%s' % pallette[names.index(j) % num_cols])
 
-    conf = """[setup]
+    conf = """[Weights]
+VIRAL_WEIGHTS=0:-1e6,2:0.2,3:0.3,5:0.5
+POV_FR_WEIGHTS=0:-1e6,1:0.01,3:0.03,5:0.05
+FR_RATIO_WEIGHTS=0:-1e6,2:2.25,3:5,5:25
+[keywords]
+VIRAL_KEYWORDS=phage,virus,prophage,terminase,t4-like,lambda-like,mu-like,capsid,tail,fiber,lambdoid,portal,tail,virion,lysis,podovirus,podo-like,head,baseplate,myovirus,siphovirus,structural
+VIRAL2_KEYWORDS=integrase,transposase
+[setup]
 input_path={output}
 name={name}
 output_path={output}/summary
@@ -559,7 +592,7 @@ log=false
 def viralscan(fasta, output, query, name, threads, identity, verbose, db,
               num_alignments, evalue, script_path, window_size, step_size):
     if name is None:
-        name = os.path.basename(fasta).partition('.')[0]
+        name = name_from_path(fasta)
 
     # prodigal
     p_proteins, p_genes, p_genbank, p_score = prodigal(
@@ -587,10 +620,7 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
     # diamond
     query_results = {}
     for q in query:
-        if not file_exists(q):
-            print("Query file wasn't found, so we're skipping", q)
-            continue
-        qname = os.path.basename(q).partition(".")[0]
+        qname = name_from_path(q)
         diamond_daa = diamond_blastx(q, os.path.join(output, "diamond",
                                                      qname + ".daa"),
                                      protein_db, threads, verbose)
@@ -602,8 +632,10 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
                                           os.path.join(output, "coverage",
                                                        qname + ".tsv.gz"),
                                           identity, verbose)
-        query_results[qname] = dict(tsv=coverage_tsv, fasta=q)
-
+        if coverage_tsv:
+            query_results[qname] = dict(coverage=coverage_tsv,
+                                        fasta=q,
+                                        blast=diamond_tsv)
     # tetramerPCA
     if script_path:
         pca_output = tetramer_pca(fasta, os.path.join(output, "tetramerPCA"),
@@ -612,12 +644,11 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
     else:
         pca_output = os.path.join(output, "tetramerPCA",
                                   "YOUR_SAMPLE-tetramer-PC.csv")
-
     # write viralsignals config file
-    signals_cfg = write_signals_conf(os.path.join(output, "signals.cfg"), output,
-                                     name, fasta, gc_output, p_proteins,
-                                     blastp_tsv, trna_output, pca_output,
-                                     query_results)
+    signals_cfg = write_signals_conf(os.path.join(output, "signals.cfg"),
+                                     output, name, fasta, gc_output,
+                                     p_proteins, blastp_tsv, trna_output,
+                                     pca_output, query_results)
 
 
 def main():

@@ -13,8 +13,11 @@ import shutil
 import subprocess
 import sys
 import tempfile
+from distutils.spawn import find_executable
 
 __version__ = "0.1.0"
+REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
+            "diamond", "gzip", "gunzip", "Rscript"]
 
 
 @contextlib.contextmanager
@@ -111,6 +114,12 @@ def file_exists(fnames):
         if not os.path.exists(f) or os.path.getsize(f) == 0:
             return False
     return True
+
+
+def check_dependencies(executables):
+    for exe in executables:
+        if not find_executable(exe):
+            sys.exit("`%s` not found in PATH." % exe)
 
 
 def name_from_path(path):
@@ -595,6 +604,7 @@ log=false
 
 def viralscan(fasta, output, query, name, threads, identity, verbose, db,
               num_alignments, evalue, script_path, window_size, step_size):
+    check_dependencies(REQUIRES)
     if name is None:
         name = name_from_path(fasta)
 

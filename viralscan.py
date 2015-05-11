@@ -349,7 +349,11 @@ def alignment_coverage(daa, tsv, fasta_index, out_file,
 
     def _daa_to_sam(daa, sam):
         cmd = "diamond view -f sam -a {daa} -o {sam}".format(daa=daa, sam=sam)
-        subprocess.check_call(cmd, shell=True)
+        try:
+            subprocess.check_call(cmd, shell=True)
+        except subprocess.CalledProcessError:
+            print("Conversion from DAA to SAM has failed.", file=sys.stderr)
+            raise
         return sam
 
     def _filter_sam(sam, hits, out_file):

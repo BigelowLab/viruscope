@@ -674,11 +674,6 @@ def main():
                 parser.error("The file %s does not exist." % a)
         return arg
 
-    def _check_db(parser, arg):
-        if not '-db' in arg:
-            parser.error("Database (-db) was not specified in blastp command.")
-        return arg
-
     p = argparse.ArgumentParser(
         description=__doc__,
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,

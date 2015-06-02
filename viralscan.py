@@ -15,7 +15,7 @@ import sys
 import tempfile
 from distutils.spawn import find_executable
 
-__version__ = "0.1.0"
+__version__ = "0.1.2"
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]
 
@@ -316,7 +316,7 @@ def diamond_blastx(fasta, out_file, db, threads=1, verbose=False):
                                                            fasta=fasta,
                                                            out=tx_out_file,
                                                            threads=threads,
-                                                           tmpdir=tempfile.tempdir)
+                                                           tmpdir=tempfile.gettempdir())
         subprocess.check_call(cmd, shell=True)
     return out_file
 

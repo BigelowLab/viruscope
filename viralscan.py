@@ -312,10 +312,11 @@ def diamond_blastx(fasta, out_file, db, threads=1, verbose=False):
 
     with file_transaction(out_file) as tx_out_file:
         cmd = ("diamond blastx -d {db} -q {fasta} "
-               "-a {out} -p {threads}").format(db=db,
-                                               fasta=fasta,
-                                               out=tx_out_file,
-                                               threads=threads)
+               "-a {out} -p {threads} -t {tmpdir}").format(db=db,
+                                                           fasta=fasta,
+                                                           out=tx_out_file,
+                                                           threads=threads,
+                                                           tmpdir=tempfile.tempdir)
         subprocess.check_call(cmd, shell=True)
     return out_file
 
@@ -436,6 +437,8 @@ def read_count(fasta):
         try:
             subprocess.check_call(cmd, shell=True)
         except subprocess.CalledProcessError:
+            # TODO: have this be a warning and grab the count without
+            # having to write the file
             print(fasta, "needs to be in a writable folder!")
             raise
     for count in open(count_file):

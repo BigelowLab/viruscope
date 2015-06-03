@@ -15,7 +15,7 @@ import sys
 import tempfile
 from distutils.spawn import find_executable
 
-__version__ = "0.1.2"
+__version__ = "0.1.3"
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]
 
@@ -675,6 +675,8 @@ def main():
         for a in tmparg:
             if not os.path.exists(a):
                 parser.error("The file %s does not exist." % a)
+            if os.path.isdir(a):
+                parser.error("Expecting file, but got folder %s." % a)
         return arg
 
     p = argparse.ArgumentParser(

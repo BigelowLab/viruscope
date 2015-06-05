@@ -23,7 +23,6 @@ python setup.py install
 + graphsignals
     + [futile.logger](https://github.com/zatonovo/futile.logger)
     + [data.table](https://github.com/Rdatatable/data.table)
-    + [argparser](https://bitbucket.org/djhshih/argparser)
 
 # Usage
 ```

@@ -1358,21 +1358,6 @@ write_summary <- function(x = summarize(),
 }
 
 
-#' Get an argument, quit with a message if it is required but missing
-#' 
-#' @param args the argument list as per argparser::parse_args()
-#' @param name the name of the argument
-#' @param required logical, if TRUE the it must not be NA
-#' @param the argument value
-get_argument <- function(name, args = ARGS, required = TRUE){
-   if (is.na(args[[name[1]]]) && required) {
-      flog.error("argument is not defined/present: %s", name)
-      print(args)
-      gvs.quit(status = 1)
-   }
-   args[[name[1]]]
-}
-
 
 #' Determine if the specified file is defined in the config file and if it
 #' exists
@@ -1511,14 +1496,13 @@ weighted_score <- function(x,
 ##### Functions above
 ##### Script below
 
-# Rscript --vanilla graph-viral-signals.Rscript --args config_file.cfg
 DEVELMODE <- interactive()
 # use these if in devel mode
 if (DEVELMODE){
    cat("DEVELOPMENT MODE\n")
-   arg_list <- c("/mnt/scgc_nfs/lab/jlabonte/Sievert_SAGs/Output/AD-133-F21signals.cfg")
+   config_file <- "/mnt/scgc_nfs/lab/jlabonte/Sievert_SAGs/Output/AD-133-F21signals.cfg"
 } else {
-   arg_list <- commandArgs(trailingOnly = TRUE)
+   config_file <- commandArgs(trailingOnly = TRUE)[1]
 }
 
 VIRAL_WEIGHTS="0:-1e6, 2:0.2, 3:0.3, 5:0.5"
@@ -1532,11 +1516,6 @@ VIRAL2_KEYWORDS <- "integrase, transposase"
 SUMMARY <- list()               
 dummy <- flog.logger(name = "viralgraph")
 if (DEVELMODE) flog.info("running in DEVELMODE")
-PARSER <- arg_parser("generate diagnostics for detecting viral signals", name = "viral-signals.Rscript")
-PARSER <- add_argument(PARSER, 'config_file',
-   help = 'configuration filename (*.cfg)')
-ARGS <- parse_args(PARSER, arg_list)
-config_file <- get_argument("config_file", required = TRUE)
 if (!file.exists(config_file)){
    flog.error("configuration file not found: %s", config_file)
    viralsignals_quit(status = 1)

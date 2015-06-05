@@ -3,7 +3,7 @@
 # Given a FASTA file with one or more contigs, perform tetramer analysis with a 
 # sliding window.  Outputs a table of PC eigenvalues for first 8 PCs.  Sui
 #
-# Usage: $ Rscript --vanilla tetramer.Rscript -input filename.fasta -output filename-tetramer-PC.csv -step 200 -window 1600
+# Usage: $ Rscript --vanilla tetramer.Rscript --input filename.fasta --outputPC filename-tetramer-PC.csv --step 200 --window 1600
 # Help: $ Rscript --vanilla tetramer.Rscript
 # convenience global option
 options(stringsAsFactors = FALSE)
@@ -466,7 +466,7 @@ write_TetraOutliers <- function(T, X, filename = "outliers.fasta", ncol = 80){
    lo <- unname(unlist(sapply(z, "[", "loWindow")))
    rr <- unique(c(hi,lo))
    
-   ff <- file(filename[1], open = "wt")
+   ff <- gzfile(paste0(filename[1],".gz"), open = "w")
    
    write_TetraOutliersOne <- function(r, raw, ff, ncol){
       cat(">", r, "\n", file = ff,sep = "")
@@ -482,7 +482,7 @@ write_TetraOutliers <- function(T, X, filename = "outliers.fasta", ncol = 80){
    
    ok <- sapply(rr, write_TetraOutliersOne, X, ff, ncol)
    close(ff)
-   if (interactive()) cat("wrote", filename, "\n")
+   if (interactive()) cat("gzipped", filename, "\n")
    invisible(all(ok))
 }
 
@@ -500,9 +500,14 @@ write_TetraPC <- function(T, filename = "tetramer-PC.csv",
    nPC =length(TETRA[['PICK']]),
    digits = 4, quote = FALSE, row.names = TRUE){
    
+   ff <- gzfile(paste0(filename, ".gz"), "w")
+   
    ok <- try(write.csv(signif(T[['PC']][['x']][,1:nPC], digits = digits), 
-      file = filename, quote = quote, row.names = row.names) )
-   if (interactive()) cat("wrote", filename, "\n")    
+      file = ff, quote = quote, row.names = row.names) )
+   
+   close(ff)
+   
+   if (interactive()) cat("gzipped", filename, "\n")    
    invisible(!inherits(ok, 'try-error') )
 }
 
@@ -556,23 +561,23 @@ tetramer_quit <- function(msg=NULL, status = -1, devmode = interactive()){
 
 # if we want to debug within R we can use the interactive() command as a flag
 if (interactive()) {
-   args <- c("-input", "/Users/Shared/data/scgc/tetra/Four_genomes.fasta",
-      "-outputPC", "/Users/Shared/data/scgc/tetra/Four_genomes-tetramer-PC.csv",
-      "-outputfasta", "/Users/Shared/data/scgc/tetra/Four_genomes-outliers.fasta")
+   args <- c("--input", "/Users/Shared/data/scgc/tetra/Four_genomes.fasta",
+      "--outputPC", "/Users/Shared/data/scgc/tetra/Four_genomes-tetramer-PC.csv",
+      "--outputfasta", "/Users/Shared/data/scgc/tetra/Four_genomes-outliers.fasta")
 } else {
    args <- commandArgs(trailingOnly = TRUE)
 }
 
 ARGS <- arg_parser("tetramer analysis")
-ARGS <- add_argument(ARGS, "-input", help = "input FASTA file",
+ARGS <- add_argument(ARGS, "--input", help = "input FASTA file",
    type = "character")
-ARGS <- add_argument(ARGS, "-outputPC", help = "output CSV file, defaults to the input path plus 'tetramer-PC.csv'",
+ARGS <- add_argument(ARGS, "--outputPC", help = "output CSV file, defaults to the input path plus 'tetramer-PC.csv'",
    type = "character")
-ARGS <- add_argument(ARGS, "-outputfasta", help = "optional output fasta of outlier windows", 
+ARGS <- add_argument(ARGS, "--outputfasta", help = "optional output fasta of outlier windows", 
    default = NA, type = "character")
-ARGS <- add_argument(ARGS, "-window", help = "window width in bases",
+ARGS <- add_argument(ARGS, "--window", help = "window width in bases",
    type = "numeric", default = 1600)
-ARGS <- add_argument(ARGS, "-step", help = "window step increment in bases",
+ARGS <- add_argument(ARGS, "--step", help = "window step increment in bases",
    type = "numeric", default = 200)
 ARGS <- parse_args(ARGS, argv = args)
 

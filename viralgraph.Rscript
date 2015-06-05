@@ -1,0 +1,1832 @@
+# Use this script to produce stacked plots from the viral search pipeline
+#
+# 
+# Usage: 
+#
+# $ Rscript --vanilla viralgraph.Rscript configfle
+
+# This will print the stack trace at the time of the error.
+options(error = function() traceback(2))
+
+# suppress automatic conversion
+options(stringsAsFactors = FALSE)
+
+# comes with base R
+library(methods)
+
+# https://bitbucket.org/djhshih/argparser
+library(argparser, quietly = TRUE)
+
+# https://github.com/zatonovo/futile.logger
+library(futile.logger, quietly = TRUE)
+
+# https://github.com/Rdatatable/data.table/wiki/Getting-started
+library(data.table, quietly = TRUE)
+
+
+#' process one or more similarties to retrieve percent identity
+#'   ident = hsp.findtext("Hsp_identity")
+#'   length = hsp.findtext("Hsp_align-len")
+#'   pident = "%0.2f" % (100*float(nident)/float(length))
+#' @param sim_file tabular data file or a data.table of its contnet
+#' @param ssP startstop lsting for proteins as a matrix
+#' @param ssF startstop for fasta file as a matrix
+#' @return a 2 col x n martrix of x and y positions of 
+process_similarity <- function(sim_file, ssP, ssF){
+   if (inherits(sim_file, "data.table")){
+      flog.info("process_similarity with provided data.table")
+      s <- sim_file
+   } else {   
+      flog.info("process_similarity: %s", basename(sim_file))
+      if (!file.exists(sim_file)) {
+         flog.error("sim_file not found %s", sim_file)
+         return(NULL)
+      }
+      s <- try(read_sim(sim_file))
+      if (inherits(s, "try-error")) {
+         flog.error("error reading similarity file: %s", sim_file)
+         return(NULL)
+      }
+      if (is.null(s)) {
+         flog.error("no hits found in similarity file")
+         return(NULL)
+      }
+   }
+   
+   ix <- protein_clipname(s[,sseqid])
+   m <- matrix(0, ncol = 3, nrow = nrow(s))
+   m[,1] <- ssF[ix, 'start'] + ssP[s[,sseqid], 'start'] + s[,sstart]
+   m[,2] <-  m[,1] + s[,send]
+   m[,3] <- s[,pident]
+   colnames(m) <- c('start', 'stop', 'pident')
+   rownames(m) <- s[,sseqid]
+  
+   invisible(m)
+}
+
+#' process a pileup
+#' 
+#' @param pileup_file a tsv file
+#' @param ssP startstop lsting for proteins as a matrix
+#' @param ssF startstop for fasta file as a matrix
+#' @return a 2-col x n matrix of x and y positions of who knows what
+#'    NOTE we may be 1-based index instead of 0 based index like in python
+process_pileup <- function(pileup_file, ssP, ssF){
+   if (is.data.frame(pileup_file)){
+      p <- pileup_file
+   } else {
+      p <- read_pileup(pileup_file)
+      if (is.null(p)) return(p)
+   }
+   
+   ix <- protein_clipname(p[,name])
+   m <- matrix(0, ncol = 2, nrow = nrow(p))
+   m[,1] <- ssF[ix, 'start'] + ssP[p[,name], 'start'] + p[,location]
+   m[,2] <-  p[,reads]
+   rownames(m) <- p[,name]
+   colnames(m) <- c('location', 'reads')
+   invisible(m)
+}
+
+#' Split a tetramer row name into name, start, stop
+#' 
+#' @param x the tetramer names, such as 
+#  "A164A21DRAFT_NODE-unique_1_len_79991.1_1-1600"  or even 
+#' "A164A21DRAFT_NODE-unique_1_len_79991.1 other stuffhead_1-1600"
+#' In either case the rownames and name column in the result should be 
+#  "A164A21DRAFT_NODE-unique_1_len_79991.1"
+#' 
+#' @param sep what separates the name and the position info
+#' @return a 3 x n matrix of [ start, stop, mid]
+split_tetramer_name <- function(x, sep = "_"){
+   z <- gregexpr(sep, x, fixed = TRUE)
+   len1 <- sapply(z, function(x) x[length(x)] - 1)
+   s2 <- sapply(z, function(x) x[length(x)] + 1)
+   s <- strsplit(substring(x, s2), "-")
+   s0 <- as.numeric(sapply(s, "[[", 1))
+   s1 <- as.numeric(sapply(s, "[[", 2))
+   mid <- s0 + (s1 - s0)/2
+   m <- cbind(s0, s1, mid)
+   colnames(m) <- c("start", "stop", "mid")
+   space <- gregexpr(" ", x, fixed = TRUE)
+   ix <- sapply(space, function(x) x[[1]] > -1)
+   if (any(ix)){
+      name <- x
+      fini <- sapply(space[ix], function(x) x[1] - 1 )
+      name[ix] <- substring(x[ix], 1, fini)
+      nix <- !ix
+      name[nix] <- substring(x[nix], 1, len1[nix])
+   } else {
+      name <- substring(x, 1, len1)
+   }
+   rownames(m) <- name
+   invisible(list(name = name, data = m))
+}
+   
+#' Process the tretramer PC.csv file
+#' 
+#' @param filename the name of the tetramer_PC.csv file
+#' @param ssF the startstop of the fasta file as a matrix
+#' @return a matrix with the following columns
+#'    [start, stop, mid, PC1, PC2, ..., PC8]
+process_tetramer <- function(filename, ssF){
+   x <- read.csv(filename, stringsAsFactors = FALSE, row.names = 1)
+   m <- split_tetramer_name(rownames(x))
+   nm <- m[["name"]]
+   m <- m[["data"]]
+   for (i in seq_along(nm)) {
+      m[i,"start"] <- ssF[nm[i], "start"] + m[i,"start"]
+      m[i,"stop"] <- ssF[nm[i], "start"] + m[i,"stop"]
+      m[i,"mid"] <- ssF[nm[i], "start"] + m[i,"mid"]
+   }
+   m <- cbind(m, as.matrix(x))
+   m <- m[order(m[,'start']),]
+   invisible(m)
+}
+
+#' Process a trnascan output file (whatever that is)
+#'
+#' @param filename the name of the trna_scan output
+#' @param ssF the startstop coordinates of the FASTA as a matrix
+process_trna_scan <- function(filename, ssF){
+  # Sequence   tRNA  Bounds   tRNA  Anti  Intron Bounds  Cove
+  # Name    tRNA #   Begin End   Type  Codon Begin End   Score
+   x <- read.table(filename, stringsAsFactors = FALSE, 
+      skip = 3, 
+      col.names = c("name", 'num', 'start', 'stop', 'type', 'codon', "start2", 'stop2', 'score'))
+   x[,'name'] <- as.character(x[,'name'])
+   
+   m <- as.matrix(x[,c('start','stop')])
+   colnames(m) <- c("start", "stop")
+   rownames(m) <- paste(x[,'name'], x[,'num'], sep = "_")
+   for (i in seq_len(nrow(m))) m[i,] <- m[i,] + ssF[x[i,'name'], 'start']
+   invisible(m)
+}
+
+#' Extract the start stop positions of a protein - not like a regular fasta
+#' instead, the start stop info is stored in the name.  
+#' example: `AAA164A08_contig00001_length59851_1 # 1 # 516 # 1 # ID=1_1;partial=10;start_type=Edge;rbs_motif=None;rbs_spacer=None;gc_cont=0.360`
+#' yields start = 1, and stop = 516
+#'
+#' @param x a named list of contigs
+#' @param sep the delimiter to split around
+#' @param asMatrix logical, if TRUE return a matrix
+#' @return a list or matrix of start stop values             
+protein_startstop <- function(x, sep = " # ", asMatrix = TRUE){
+   nm <- names(x)
+   names(nm) <- nm
+   s <- strsplit(nm, sep, fixed = TRUE)
+   ss <- lapply(s, function(x) c(start = as.numeric(x[2]), 
+      stop = as.numeric(x[3])) )
+   if (asMatrix) ss <- do.call(rbind, ss)
+   invisible(ss)
+}
+
+
+# Extract the ID of a protein header line
+# 
+# protein_id <- function(x, sep = " # "){
+#    if (inherits(x, 'fastaGroup')){
+#       return(invisible(lapply(x, protein_starstop)))
+#    }
+#    nm <- sapply(x, "[[", "name")
+#    s <- strsplit(nm, sep, fixed = TRUE)
+#    id <- sapply(s, function(x) {
+#       s <- strsplit(x[1], "_", fixed = TRUE)[[1]]
+#       s[length(s)]
+#       } )
+#    for (i in seq_along(x) ) x[[i]][['id']] <- id[[i]] 
+#    invisible(x)
+# }
+
+#' process the proteins against the provided lookup
+#'
+#' use blastp names to find the protein startstop, to those add the contig offset
+#'
+#' @param ssP start stop for each protein as a matrix
+#' @param ssF the start stop for each input contig
+#' @param viral_blastp list of contigs name selected by \code{blastp_viral_genes}
+process_proteins <- function(ssP, ssF, viral_blastp){
+   # Pname = "A164A21DRAFT_NODE-unique_1_len_79991.1_1 # 1 # 2235 # -1 # ID=1_1;partial=10;start_type=ATG;rbs_motif=None;rbs_spacer=None;gc_cont=0.509"
+   # rownames(ssP) = A164A21DRAFT_NODE-unique_1_len_79991.1
+   # blastpNames = 'A164A21DRAFT_NODE-unique_66_len_3637.66_1 # 3 # 734 # 1 # ID=66_1;partial=10;start_type=Edge;rbs_motif=None;rbs_spacer=None;gc_cont=0.490'
+   ix <- fasta_clipname(viral_blastp, what = 'first')
+   iy <- protein_clipname(ix)
+   m <- matrix(0, ncol = 2, nrow = length(ix), dimnames = list(ix, c("start", "stop")))
+   m[,"start"] <- ssP[ix, 'start'] + ssF[iy, 'start']
+   m[,'stop'] <- ssP[ix, 'stop'] + ssF[iy, 'start']
+   invisible(m)
+}
+
+
+#' Compute the start-stop locations and place in contiguous order
+#'
+#' @param x a named list of contigs
+#' @param asMatrix logical, if TRUE return a matrix
+#' @param typically a matrix of [start, stop, len] with rows properly named
+fasta_startstop<- function(x, asMatrix = TRUE){
+   n <- sapply(x, nchar)
+   x1 <- cumsum(n)
+   x0 <- c(1, x1[1:length(x1)-1]+1)
+   names(x0) <- names(x1)
+   z <- mapply(function(a,b, n) c(start=a, stop=b, len = n), x0, x1, n, SIMPLIFY=FALSE)
+   if (asMatrix) z <- do.call(rbind, z)
+   invisible(z)
+}
+
+#' clip the name of a contig - we clip either 'all' (that might be badly named since 
+#' it means do not clip anything at all - just return what you were given),
+#' 'first' or 'last' element as separated by sep.
+#'
+#' @param x character vector of contig names
+#' @param sep the character to split around
+#' @param what the signal indicating what to return
+#' @return a character string the same length as x
+fasta_clipname <- function(x, sep = " ", what = c("all", "first", "last")[2]){
+   if (tolower(what) == 'all') return(x)
+   s <- strsplit(x, sep)
+   n <- switch(what,
+      'first' = 1,
+      length(s[[1]]))
+   sapply(s, "[[", n)
+}
+
+#' Given a Fasta class object return the coverage positions if any
+#' We assume that if the first contig name has _cov_ as shown below that ALL
+#' contig names will have it.  If not we return NULL
+#' "AC-310_N13_L007_NODE_112_length_12575_cov_112.002"
+#'
+#' @param x vector of contig names
+#' @param sep the delimiter we split the name around
+#' @param flag the flag that indicates coverage is available
+#' @return a named vector of coverage values OR NULL
+fasta_coverage <- function(x, sep = "[_ ]", flag = "cov"){
+   s <- strsplit(x, sep)
+   if (!(flag %in% s[[1]])) return(NULL)
+   # use this function to get first itiem after the flag
+   get_next_after_flag <- function(x, flag = flag){
+      ix <- grep(flag, x, fixed = TRUE)
+      x[ix[1]+1]
+   }
+   cov <- as.numeric(sapply(s, get_next_after_flag, flag=flag))
+   names(cov) <- x
+   invisible(cov)
+}
+
+#' Clip the trailing identifier from a protein
+#' "A164A21DRAFT_NODE-unique_1_len_79991.1_1" become "A164A21DRAFT_NODE-unique_1_len_79991.1"
+#' 
+#' @param x character vector of names
+#' @param sep character, by default "_"
+#' @return charcater vector of clipped names
+protein_clipname <- function(x, sep = "_"){
+   z <- gregexpr(sep, x, fixed = TRUE)
+   len <- sapply(z, function(x) x[length(x)] - 1)
+   substring(x, 1, len)
+}
+
+
+#' Compute GC content, GC Skewness 
+#'
+#' @param GC_file the name of the gc_content file or a data.frame of the file contents
+#' @param ssF the startstop matrix for FASTA
+#' @param sample_rate 
+#' @return a 3xn matrix of x (location), gc (content) and skew
+process_gccontent <- function(gc_content_file, ssF, sampling_rate = 500){
+   if (is.data.frame(gc_content_file)) {
+      g <- gc_content_file
+   } else {
+      g <- read_gccontent(gc_content_file)
+   }
+   ix <- seq(from = 1, to = nrow(g), by = sampling_rate)
+   g <- g[ix,]
+   seq_name <- sapply(strsplit(g[,1], " "), "[[", 1)
+   ofst <- ssF[seq_name, 'start']
+   x <- ofst + g[,'POSITION']
+   skew <- g[,'SKEW']
+   gc <- g[,'CONTENT']
+   m <- cbind(x, gc, skew)
+   rownames(m) <- seq_name
+   colnames(m) <- c("x", "gc", "skew")
+   invisible(m)
+}
+
+#' compute the minmax for a list of pileup matrices
+#' @param x a list of pileup matrices
+#' @return a two element vector of min,max
+range_pileup <- function(x){
+   r <- lapply(x, function(x) range(x[,2]))
+   mn <- unlist(sapply(r, "[", 1))
+   mx <- unlist(sapply(r, "[", 2))
+   c(min(mn), max(mx))
+}
+
+
+#' Plot virus information as a series of horizontal lines
+#' 
+#' @param x a virus matrix of startstop
+#' @param y the vertical location of the segment (assumed bwtween 0-1)
+#' @param color the color of the bar to draw
+#' @param padding some kind of left/right extra padding
+#' @param pch the plot symbol to terminate each line
+apply_line <- function(x, y = 0.5, col = 'red', padding = 0, pch = '|'){
+   
+   if (missing(x) || is.null(x)) return(NULL)
+   
+   cex <- ifelse( grepl('pdf', names(dev.cur())), 0.5, 1)
+   rownames(x) <- NULL
+   x <- t(apply(x, 1, sort))
+   x[,1] <- x[,1] - padding
+   x[,2] <- x[,2] + padding
+   y <- rep(y,2)
+   for (i in seq_len(nrow(x)) ) points(x[i,], y, col = col, pch = pch, typ = 'o', cex = cex)
+}
+
+#' Apply the grey-white rectangles 
+#' 
+#' @param ssF the startstop position for the Fasta as matrix
+#' @param col the color to draw every other fasta segment 
+apply_background <- function(ssF, col = 'grey'){
+   u <- par("usr")
+   ix <- seq(from = 1, to = nrow(ssF), by = 2)
+   if (par('ylog')) u[3:4] <- 10^u[3:4]
+   for (i in ix) rect(ssF[i,'start'], u[3], ssF[i, 'stop'], u[4], col = col, border = NA)
+}
+
+#' Pileup plot - depends upon grabbing variables from enclosing environment by name
+#' this isn't a best practice, but it works for right now
+#'
+#' @param ng numeric, the number of graph elements (plot)
+do_plot <- function(filename = file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, ".pdf"))){
+
+   #' Test is a number is even
+   #' @param x numeric value to test
+   #' @return logical, TRUE if the input is even
+   is.even <- function(x){(x %% 2) == 0} 
+
+   #' Scales the input numeric vector or array into the from-to range 
+   #' specified.
+   #'
+   #' @param x numeric vector, matrix or array
+   #' @param from numeric lower value to scale the input into
+   #' @param to numeric upper value for the scale
+   #' @param by specify how the scaling is performed: all, row or col
+   #' @param na.rm logical, see \code{\link{range}}
+   #' @return numeric of the same size as the input but linearly scaled into the from-to range
+   scaleInto <- function(x, from = 0, to = 1, 
+      by = c("all", "row", "col")[1], na.rm = TRUE){               
+      if (by == "col"){
+         x <- apply(x, 2, scaleInto, from = from, to = to, by = "all")
+      } else if (by == "row"){
+         x <- t(apply(x, 1, scaleInto, from = from, to = to, by = "all"))
+      } else {
+         rx <- range(x, na.rm = na.rm)
+         x <- (x - rx[1]) / (rx[2] - rx[1]) * (to - from) + from
+      }
+      return(x)
+   }
+
+   flog.info("writing %s", filename)
+   # number of graphs determined by 4 or 5 (depends if there is coverage) and the
+   # number of pileups
+   has_cov <- "cov" %in% colnames(ssF)
+   # 1. calls
+   # 2. coverage (if available)
+   # 3. GC
+   # 4. Tetramer
+   # 5. Pileup_1 ...
+   ng <- (if (has_cov) 4 else 3 ) + length(sims) + length(pileups)
+   # start the output file 
+   if (grepl(".png",filename, fixed = TRUE)){
+      fig <- c(0.1, .9, 0.05, 0.9)
+      lab.cex <- 1 # size of the axis label 
+      ax.cex <- 1  #size of tick text
+      text.line <- 3 # distance between axis label and axis in lines
+      contignumcex <- 0.8
+      genelabelcex <- 0.6
+      axlabelcex <- 0.8
+      png(filename, width = 2000, height = 170*ng, pointsize = 16)
+   } else {
+      # size of figure region in normalize device coords
+      fig <- c(0.1, .9, 0.1, 0.9)
+      ax.cex <- 0.8  #size of axis text 
+      text.line <- 3 # distance between axis label and axis in lines
+      contignumcex <- 0.5
+      genelabelcex <- 0.6
+      axlabelcex = 0.6
+      pdf(filename, width = 12, height = ng*1.1)
+   }
+   opar <- par(no.readonly = TRUE)
+
+   # start-stops of the plot y-coords
+   plty <- seq(fig[4], fig[3], length = ng + 1)
+   # start-stop of x-coords
+   pltx <- fig[1:2]  
+   
+   # CALLS 
+   iplot = 1
+   par(xaxt="n", yaxt="n", plt = c(pltx, plty[(iplot+1):iplot]), las = 1, 
+      new = (iplot != 1), xaxs = 'i', yaxs = 'r')
+   yr <- c(0,1)
+   plot(xlim, yr, xlim = xlim, typ = 'n', col = 'blue',
+      xlab = '', ylab = '', ylim = yr,
+      main = SAMPLE_NAME)
+   oxpd <- par("xpd")
+   par(xpd = NA)
+   u <- par("usr")
+   nm <- rownames(ssF)
+   text(ssF[,'start'] + ssF[,"len"]/2, rep(u[4]+0.1, nrow(ssF)), 1:nrow(ssF),cex = contignumcex)
+   apply_background(ssF)
+   
+   if (!is.null(viral_protein)) {
+      apply_line(viral_protein, y = 0.35, col = get_config(CFG,"genes", "viral"))
+      text(1000, 0.15, "virus protein",
+         col = get_config(CFG,"genes", "viral"),
+         cex = genelabelcex, adj = c(0,NA))
+   }
+   if (!is.null(viral2_protein)){
+      apply_line(viral2_protein, y = 0.25, col = get_config(CFG,"genes", "viral2"))
+      text(1000, 0.02, "virus2 protein",
+         col = get_config(CFG,"genes", "viral2"),
+         cex = genelabelcex, adj = c(0,NA))
+   }
+   if (length(trna) > 0){
+      apply_line(trna, y = 0.75, col = get_config(CFG,"genes", "tRNA"))
+      text(1000, 0.95, "tRNA", 
+         col = get_config(CFG,"genes", "tRNA"), cex = genelabelcex, adj = c(0,NA))
+   }
+   if (!is.null(hypo_protein)) {
+      apply_line(hypo_protein, y = 0.5, col = get_config(CFG,"genes", "hypothetical"))
+      text(1000, 0.6, "hypothetical virus protein", 
+         col = get_config(CFG,"genes", "hypothetical"), cex = genelabelcex, adj = c(0,NA))
+   }
+   
+   box()
+   yax <- ifelse(is.even(iplot), 4, 2)
+   par(las = 0)
+   mtext("genes", side = yax, line = text.line, cex = ax.cex)
+   
+   # COVERAGE
+   if (has_cov){
+      iplot <- iplot + 1
+      par(xaxt="n", yaxt="n", plt = c(pltx, plty[(iplot+1):iplot]), las = 1, 
+         new = (i != 1), xaxs = 'i')
+      yr <- range(ssF[,'cov'])
+      plot(xlim, yr, xlim = xlim, typ = 'n', col = 'blue',
+         log = ifelse(get_config(CFG,"Coverage", "log") == 'true', 'y',''),
+         xlab = '', ylab = '', ylim = yr)
+      apply_background(ssF)
+      box()
+      for (i in seq_len(nrow(ssF))) {
+         segments(ssF[i,'start'], ssF[i,'cov'], ssF[i,'stop'],  ssF[i,'cov'],
+             col = "blue", lwd = 2)
+      }
+      par(yaxt="s") 
+      yax <- ifelse(is.even(iplot), 4, 2)
+      axis(yax, axTicks(yax), cex.axis = ax.cex)
+      par(las = 0)
+      mtext("Coverage", side = yax, line = text.line, cex = ax.cex)
+   } # has_cov is TRUE
+   
+   # GC
+   iplot = iplot + 1
+   par(xaxt="n", yaxt="n", plt = c(pltx, plty[(iplot+1):iplot]), las = 1, 
+      new = (i != 1), xaxs = 'i')
+   plot(gc[,'x'], 100 * gc[,'gc'], xlim = xlim, typ = 'n', 
+      col = get_config(CFG,"GC", "percent"),
+      log = ifelse(get_config(CFG,"GC", "log") == 'true', 'y',''),
+      xlab = '', ylab = '')
+   apply_background(ssF)
+   box()
+   points(gc[,'x'], 100 * gc[,'gc'], typ = 'l',  col = get_config(CFG,"GC", "percent"))
+   xax <- axTicks(1)
+   u <- par("usr")
+   par(yaxt="s") 
+   yax <- ifelse(is.even(iplot), 4, 2)
+   yaxticks <- axTicks(yax)
+   axis(yax, yaxticks, cex.axis = ax.cex * 0.7, col = get_config(CFG,"GC", "percent"),
+      col.axis = get_config(CFG,"GC", "percent"))
+   par(las = 0)
+   mtext("GC %", side = yax, line = text.line, cex = ax.cex, 
+      col = get_config(CFG,"GC", "percent") )
+   
+   y <- scaleInto(gc[,'skew'], from = u[3], to = u[4])
+   points(gc[,'x'], y, typ = 'l', 
+      col = get_config(CFG,"GC", "skew"))
+   yax <- ifelse(is.even(iplot + 1), 4, 2)
+   yr <- range(gc[,'skew'])
+   par(las=1)
+   yticks <- scaleInto(yaxticks, from = yr[1], to = yr[2])
+   axis(yax, yaxticks, labels = sprintf("%.3f", yticks), 
+      cex.axis = ax.cex * 0.7, 
+      col = get_config(CFG,"GC", "skew"), col.axis = get_config(CFG,"GC", "skew"))
+   par(las = 0)
+   mtext("GC Skew", side = yax, line = text.line, cex = ax.cex, 
+      col = get_config(CFG,"GC", "skew") )
+   
+   #TETRAMER
+   iplot = iplot + 1
+   yr <- range(tetramer[,c("PC1", "PC2")])
+   par(xaxt="n", yaxt="n", plt = c(pltx, plty[(iplot+1):iplot]), las = 1, new = (iplot != 1))
+   plot(xlim, yr, xlim = xlim, typ = 'n', xlab = '', ylab = '', ylim = yr)
+   apply_background(ssF)  
+   box() 
+   points(tetramer[,'mid'], tetramer[,'PC2'], typ = 'l', col = get_config(CFG,"Tetramer PC", "PC2"))
+   points(tetramer[,'mid'], tetramer[,'PC1'], typ = 'l', col = get_config(CFG,"Tetramer PC", "PC1"))
+   par(yaxt="s") 
+   yax <- ifelse(is.even(iplot), 4, 2)
+   axis(yax, axTicks(yax), cex.axis = ax.cex * 0.7)
+   par(las = 0)
+   mtext("Tetramer", side = yax, line = text.line, cex = ax.cex)
+   mtext("PC1", side = yax, line = text.line - 1 , cex = ax.cex * 0.8, 
+      col = get_config(CFG,"Tetramer PC", "PC1"), adj = 0.2)
+   mtext("PC2", side = yax, line = text.line - 1, cex = ax.cex * 0.8, 
+      col = get_config(CFG,"Tetramer PC", "PC2"), adj = 0.8)   
+   
+   # similarites to plot?
+   for (isim in seq_along(sims)){
+      # loop through 'Similarty_1', 'Similarity_2', ...
+      iplot <- iplot + 1
+      sim <- sims[[isim]]
+      isim_name = paste0("Similarity_", isim)
+      yr <- c(50,100)
+      par(xaxt="n", yaxt="n", plt = c(pltx, plty[(iplot+1):iplot]), las = 1, new = (iplot != 1))
+      plot(xlim, yr, xlim = xlim, typ = 'n',
+         log = ifelse(get_config(CFG,isim_name, "log") == 'true', 'y',''),
+         xlab = '', ylab = '', ylim = yr)
+      apply_background(ssF)
+      box()
+      # now loop through name1, name2 ...
+      for (jsim in seq_along(sim)){
+         col <- get_config(CFG,isim_name, paste0("color", jsim))
+         for (k in seq_along(sim[[jsim]])){
+            segments(sim[[jsim]][[k]][,'start'], sim[[jsim]][[k]][,'pident'],
+               sim[[jsim]][[k]][,'stop'], sim[[jsim]][[k]][,'pident'], col = col)
+         } # k-loop
+      }
+      par(yaxt="s") 
+      yax <- ifelse(is.even(iplot), 4, 2)
+      axis(yax, axTicks(yax), cex.axis = ax.cex * 0.7)
+      par(las = 0)
+      mtext("Similarity %" , side = yax, line = text.line, cex = ax.cex)
+   } 
+   
+   # we only go here if there are pileups to plot
+   container_flags <- names(CFG)
+   pileup_flags <- container_flags[grepl("Pileup_", container_flags)]
+   pileup_names <- sapply(pileup_flags, function(x) get_config(CFG,x, "name"))
+   pileup_flags <- names(pileup_names)[pileup_names %in% names(pileups)] 
+   for (ip_name in pileup_flags){
+      iplot = iplot + 1
+      ipileup <- get_config(CFG,ip_name, "name")
+      pileup <- pileups[[ipileup]]
+      yr <- range_pileup(pileup)
+      plt <- c(pltx, plty[(iplot+1):iplot])
+      par(xaxt="n", yaxt="n", plt = plt, las = 1, new = (iplot != 1))
+      plot(xlim, yr, xlim = xlim, typ = 'n', col = get_config(CFG,ip_name,"color"),
+         log = ifelse(get_config(CFG,ip_name, "log") == 'true', 'y',''),
+         xlab = '', ylab = '', ylim = yr)
+      apply_background(ssF)
+      box()
+      u <- par("usr")
+      bottom <-  ifelse(par("ylog"), 10^u[3], 0) 
+      for (j in seq_along(pileup)) {
+         n <- nrow(pileup[[j]])
+         segments(pileup[[j]][,1], rep(bottom,n), pileup[[j]][,1], pileup[[j]][,2], 
+            col = get_config(CFG,ip_name,"color"))
+      }
+      par(yaxt="s") 
+      yax <- ifelse(is.even(iplot), 4, 2)
+      axis(yax, axTicks(yax), cex.axis = ax.cex * 0.7)
+      par(las = 0)
+      mtext(get_config(CFG,ip_name,"name"), side = yax, line = text.line, cex = ax.cex)
+   } # we have pileups
+   
+   # draw the bottom axis
+   par(xaxt="s")
+   axis(1, at =xax, labels = xax, line = 0, cex = ax.cex)
+   
+   dev.off() 
+}
+
+#' Quit R or not depending upon DEVELMODE value
+viralsignals_quit <- function(status = 0, fake = DEVELMODE){
+   #TMPDIR
+   if (file.exists(TMPDIR) && !fake) system(paste("rm -rf", TMPDIR))
+   if (!fake) quit(status = status, save = "no")
+   NULL
+}
+
+
+#' A semi-generic function to clip a name to the contig or gene level
+#'
+#' clip "AAA164A08_contig00002_length17769_11 boo hoo"
+#' to "AAA164A08_contig00002_length17769_11" (gene) or "AAA164A08_contig00002" (contig)
+#' @param x input character vector
+#' @param seps the separators used (first bu seps[1] thn by seps[2] depending upon\code{to} argument
+#' @param to character flag to indicate what we want to retrieve (either 'contig' or 'gene')
+#' @return character vector same size and shape as input with appropriate name clipping
+clip_name <- function(x, seps = c(" ", "_"), to = c('contig', 'gene')[1]){
+   # first we clip anything after " "
+   nm <- strsplit(x, seps[1], fixed = TRUE)
+   nm <- sapply(nm, "[[", 1)
+   if (to == 'contig'){
+      p <- gregexpr(seps[2], nm, fixed = TRUE)
+      len <- sapply(p, length)
+      px <- len - 1
+      ix <- mapply("[[", p, px)
+      nm <- substring(nm,1, ix-1)
+   } 
+   return(nm)
+}
+
+
+#' compare two character vectors to determine if any or all 
+#' elements in A are found (somewhere) in B
+#' 
+#' @param A a character vector with the elements to look for in B
+#' @param B a character vector with elements to within for elements of A
+#' @param what either 'all' or 'any'(the default)
+#' @return logical TRUE if the condition is met ("all A in B" or "any A in B")
+A_in_B <- function(A, B, what = c('any', 'all')[1]){
+   a_in_B <- function(a, B){ grepl(a, B, fixed = TRUE) }
+   switch(what,
+      "all" = apply(sapply(A, a_in_B, B), 1, all),
+      apply(sapply(A, a_in_B, B), 1, any) )
+}
+
+
+#' Create a temporary directory.  By default it will be created in /dev/shm but 
+#' if not available then R's tempdir() is used.  In each case the temporary
+#' directory is created. 
+#' @param pattern prepended to the randomn file name 
+get_temp_dir <- function(pattern = ""){
+   if (pattern == "") pattern = 'graph-viral-signals'
+   if (file.exists("/dev/shm")){
+      x <- tempfile(pattern = pattern, tmpdir = "/dev/shm")
+   } else {
+      x <- file.path(tempdir(), basename(tempfile(pattern)))
+   }
+   ok <- dir.create(x)
+   if (!ok) warning(paste("unable to create temporary directory:", x))
+   x
+}
+
+#' Create a temporary file name
+#'
+#' @param path charcater the path within which to create the filename
+#' NOTE the file is not actually created, see \code{tempfile}
+#' @param ... futher arguments for \code{tempfile}
+get_temp_filename <- function( path = TMPDIR,...){
+   tempfile(tmpdir = TMPDIR, ...)
+}
+
+#' Copy a file to /dev/shm
+#'
+#' @param filename the name of the file to be copied
+#' @param pattern a descriptive name to attach to the destination file
+#' @param the path to copy to
+#' @return a named logical indicating success, the name is the name of the file
+copy_to_tmpdir <- function(filename, pattern = 'temp', path = TMPDIR){
+   file_tmp <- get_temp_filename(pattern = pattern, path = path)
+   ok <- system(paste("cp", filename, file_tmp))
+   sapply(file_tmp, file.exists)
+}
+
+#' Remove one or more file using system calls
+#'
+#' @param filename the name of the file(s) to be removed
+#' @return a named logical indicating success, named by file
+remove_file <- function(filename){
+   ok <- system(paste('rm -f', paste(filename, collapse = " ")))
+   sapply(filename, function(x) !file.exists(x))
+}
+
+#' Remove one or more directories using system calls
+#'
+#' @param path the name of the file(s) to be removed
+#' @return a named logical indicating success, named by file
+remove_dir <- function(path = TMPDIR){
+   ok <- system(paste('rm -rf', paste(path, collapse = " ")))
+   sapply(path, function(x) !file.exists(x))
+}
+
+#' Select the best hist per qseqid based upon a two step
+#' First select the longest hit per qseqid.  If there is a tie, then 
+#' select the contig with the highest bit-score. If the is still a tie then
+#' select the first of these best hits.
+#' 
+#' @param x the data frame
+#' @param first a column name for the first filter (defaults to 'length')
+#' @param second a column name for the second filter (defaults to 'bitscore')
+#' @return a data frame trimmed such that there is only one hit per qseqid
+filter_best_hit <- function(x,
+   first = 'length', second = 'bitscore'){
+   
+   #' this is the work horse, for each subset do the computation
+   filter_two_step <- function(x, first = 'length', second = 'bitscore'){
+      if (nrow(x) == 1) return(x) # there is only one
+      mx1 <- max(x[,first])
+      ix <- which(x[,first] >= mx1)  # note the GE
+      if (length(ix) > 1){  # tie?
+         mx2 <- max(x[ix,second])
+         iy <- which(x[ix,second] >= mx2)
+         x <- x[ix[iy[1]],]  # trim it down,if there is a tie then the first goes
+      } else { # no tie
+         x <- x[ix[1],] # trim it down
+      }
+      return(x)
+   }  
+   # split into qseqid groups of data frames
+   x <- split(x, x[,'qseqid'])
+   # do the filterin on each subgroup
+   x <- lapply( x, filter_two_step, first = first, second = second)
+   #bind them together and return
+   do.call(rbind, x)
+}
+
+
+#' Read a blast table - either python or wrangle (R) generated
+#' See https://gist.github.com/brwnj/7e82686e58fc1c649e75
+#' @param filename the name of the file
+#' @param klass character, the type of class to return - either data.frame or data.table
+#' @return a data.frame or data.table with an attribute 'wrangle' or 'py'
+read_blasttable <- function(filename, klass = c("data.frame", "data.table")[2]){
+
+  asDT <- klass == "data.table"
+  if (asDT) stopifnot(require(data.table))
+  
+  PYCOLS <- structure(c("character", "character", "numeric", "numeric", "numeric", 
+    "numeric", "numeric", "numeric", "numeric", "numeric", "numeric", 
+    "numeric", "character", "numeric", "numeric", "numeric", "numeric", 
+    "numeric", "numeric", "numeric", "character", "character", "numeric", 
+    "numeric", "character"), .Names = c("qseqid", "sseqid", "pident", 
+    "length", "mismatch", "gapopen", "qstart", "qend", "sstart", 
+    "send", "evalue", "bitscore", "sallseqid", "score", "nident", 
+    "positive", "gaps", "ppos", "qframe", "sframe", "qseq", "sseq", 
+    "qlen", "slen", "salltitles"))
+  WRANGLECOLS <- structure(c("integer", "character", "character", "integer", "integer", 
+    "character", "character", "character", "integer", "integer", 
+    "double", "integer", "double", "integer", "integer", "integer", 
+    "integer", "integer", "integer", "integer", "integer", "integer", 
+    "character", "character", "character"), .Names = c("Iteration_iter-num", 
+    "Iteration_query-ID", "Iteration_query-def", "Iteration_query-len", 
+    "Hit_num", "Hit_id", "Hit_def", "Hit_accession", "Hit_len", "Hsp_num", 
+    "Hsp_bit-score", "Hsp_score", "Hsp_evalue", "Hsp_query-from", 
+    "Hsp_query-to", "Hsp_hit-from", "Hsp_hit-to", "Hsp_query-frame", 
+    "Hsp_identity", "Hsp_positive", "Hsp_gaps", "Hsp_align-len", 
+    "Hsp_qseq", "Hsp_hseq", "Hsp_midline"))
+  
+  #' Read a Python generated blast tabular file
+  #' @param filename the name of the file
+  #' @param cols the master list of column names and types
+  #' @param asDT if TRUE read and return as data.table
+  #' @return a data.frame or data.table
+  read_pyblast <- function(filename, coldef = PYCOLS, asDT = TRUE){
+    row1 <- strsplit(scan(filename, what = character(), sep = "\n", quiet = TRUE, n = 1), "\t")[[1]]
+    if (row1[[1]] == 'qseqid'){
+      header = TRUE  
+      col_names <- row1
+    } else {
+      header = FALSE
+      col_names <- names(coldef)[1:length(row1)]
+    }
+    col_types <- coldef[col_names]
+    if (asDT){
+      x <- fread2(filename, header = header, sep = "\t", stringsAsFactors = FALSE,
+        showProgress = FALSE)
+      setnames(x, col_names)
+    } else {
+      x <- read.table(filename, header = header, quote ="", comment = "", 
+        sep = "\t", 
+        stringsAsFactors=FALSE, col.names = col_names, colClasses = col_types)
+    }
+    x
+  } 
+  
+  #' Read a blastwrangle (R) generated blast tabular file
+  #' @param filename the name of the file
+  #' @param cols the master list of column names and types
+  #' @param asDT if TRUE read and return as data.table
+  #' @return a data.frame or data.table
+  read_wrangleblast <- function(filename, coldef = WRANGLECOLS, asDT = TRUE){
+    row1 <- scan(filename, what = character(), sep = "\n", quiet = TRUE, n = 1)
+    if ( length(row1) == 0 ) return(NULL)
+    row1 <- strsplit(row1, "\t")[[1]]
+    if (asDT){
+      x <- fread2(filename, sep = "\t", header = TRUE, stringsAsFactors = FALSE,
+        showProgress = FALSE)
+      setnames(x, names(coldef[row1]))
+    } else {
+      x <- read.table(filename, sep = "\t", header = TRUE, 
+        quote = "", comment = "", stringsAsFactors = FALSE,
+        colClasses = coldef[row1])
+    }
+    x
+  }
+  
+  # nibble the first element of the first row - it tells us a bit about the file
+  row1 <- scan(filename[1], what = character(), n = 1, sep = "\n", quiet = TRUE)
+  if (length(row1) == 0) return(NULL)
+  first <- strsplit(row1, "\t")[[1]][1]
+ 
+  x <- switch(first,
+    'Iteration_iter-num' = read_wrangleblast(filename[1], asDT = asDT),
+    read_pyblast(filename, asDT = asDT))
+  if (asDT) {
+    setattr(x, 'source', switch(first,
+      'Iteration_iter-num' = 'wrangle',
+      'py'))
+  } else {
+     attr(x, 'source') <- switch(first,
+      'Iteration_iter-num' = 'wrangle',
+      'py') 
+  }
+  invisible(x)
+}
+
+
+#' Read a similarity file
+#' 
+#' @param filename
+#' @param minPident the minimum pident (50)
+#' @param select_best logical, if TRUE then filter for the best hit
+#' @return a data.frame of blast data with pident >= minPident
+read_sim <- function(filename, minPident = 50, select_best = TRUE){
+ flog.info("read_similarity: %s", basename(filename))
+   if (!file.exists(filename)) {
+      flog.error("similarity file not found: %s", filename)
+      return(NULL)
+   } 
+   ok <- copy_to_tmpdir(filename, pattern = 'similarity')
+   if (!ok) {
+      flog.error("unable to copy similarity to dev/shm")
+      return(NULL)
+   }
+
+   x <- suppressWarnings(read_blasttable(names(ok)[1]))
+   ok <- remove_file(names(ok)[1])
+   if (!is.null(x)){
+      if (!is.na(minPident) && (minPident > 0)) x <- x[x[,pident]>= minPident,]
+      if (select_best) x <- select_best_hit(x)
+   }
+   invisible(x)
+}
+
+#' Select the best hist per qseqid based upon a two step
+#' First select the longest hit per qseqid.  If there is a tie, then 
+#' select the contig with the highest bit-score. If the is still a tie then
+#' select the first of these best hits.
+#' 
+#' @param x the blast data.table (see \code{read_blasttable})
+#' @param first a column name for the first filter (defaults to 'length')
+#' @param second a column name for the second filter (defaults to 'bitscore')
+#' @return a data frame trimmed such that there is only one hit per qseqid
+select_best_hit <- function(x, first = 'length', second = 'bitscore'){ 
+   cols <- c("qseqid", first, second)
+   flog.info("selecting best hit based upon: %s", paste(cols, collapse=" ") )
+   setkeyv(x, cols)
+   x[,.SD[.N], by = qseqid]
+}
+
+#' Read a tab-delimited pileup file
+#' 
+#' @param filename
+#' @return a data frame with columns 'name', 'start', 'reads' or NULL
+read_pileup <- function(filename, select_best = TRUE){
+   flog.info("read_pileup: %s", basename(filename))
+   if (!file.exists(filename)) {
+      flog.error("pileup_file not found %s", filename)
+      return(NULL)
+   } 
+   
+   # is gz file is empty but non-zero size it will be 20 bytes
+   if (file_empty(filename)) {
+      flog.warn("file is empty: %s", filename)
+      return(NULL)
+   }
+   
+   ok <- copy_to_tmpdir(filename, pattern = 'pileup')
+   if (!ok) {
+      flog.error("unable to copy pileup to dev/shm")
+      return(NULL)
+   }
+   tmp_file <- names(ok)[1]
+   x <- fread2(tmp_file,stringsAsFactors = FALSE, header = FALSE)
+   ok <- remove_file(tmp_file)
+   setnames(x, c("name", "location", "reads"))
+   x[,name:= as.character(x[,name])]
+   invisible(x)
+}
+
+#' Read a fasta file
+#'
+#' @param filename 
+#' @return a named list of contigs or NULL
+read_fasta <- function(filename){
+   flog.info("read_fasta: %s", basename(filename))
+   if (!file.exists(filename)) {
+      flog.error("fasta file not found: %s", filename)
+      return(NULL)
+   } 
+   ok <- copy_to_tmpdir(filename, pattern = 'fasta')
+   tmp_file <- names(ok)[1]
+   txt <- scan(tmp_file, what = 'character', quiet= TRUE, sep = "\n")
+   ix <- grep(">", txt, fixed = TRUE)
+   len <- nchar(txt[ix])
+   nm <- substring(txt[ix], 2, len)
+   x <- vector(mode = 'list', length = length(nm))
+   # start/stops for contig data
+   if (length(ix) == 1){
+      iz <- length(txt)
+   } else {
+      iz <- c(ix[2:length(ix)]-1, length(txt))
+   }
+   names(x) <- nm
+   for (i in seq_along(nm)){
+      #cat(i, (ix[i]+1),(iz[i]-1), "\n")
+      x[[nm[i]]] <- paste(txt[(ix[i]+1):(iz[i])], collapse = "")
+   }
+   
+   ok <- remove_file(tmp_file)
+   invisible(x)
+}
+
+#' Read a GC content file
+#'
+#' @param filename
+#' @return a data frame with the columns "SEQUENCE_NAME","POSITION","SKEW" and "CONTENT" or NULL
+read_gccontent <- function(filename){
+   flog.info("read_gccontent: %s", basename(filename))
+   if (!file.exists(filename)) {
+      flog.error("gccontent file not found: %s", filename)
+      return(NULL)
+   } 
+   ok <- copy_to_tmpdir(filename, pattern = 'gccontent')
+   tmp_file <- names(ok)[1]
+   x <- read.table(tmp_file, stringsAsFactors = FALSE, header = TRUE, sep = "\t")
+   ok <- remove_file(tmp_file)
+   invisible(x)
+}
+
+
+#' Test if a file is empty (whether gzipped or not)
+#'
+#' @param filename one or more filenames
+#' @param gzip_size the number of bytes to exceed for a gzip file to be non-empty
+#' @return logical one per input filename 
+file_empty <- function(filename, gzip_size = 20){
+   ok <- TRUE
+   isgz <- sapply(filename, file_gzip)
+   fi <- file.info(filename)
+   thresh <- rep(0, length(filename))
+   thresh[isgz] <- gzip_size
+   return(fi[filename, 'size'] <= thresh)
+}
+
+#' Test if a file is gzipped
+#' 
+#' We guess that the first two bytes tell us enough to know if gzipped
+#' file we have.  For more information see 
+#' \url{http://www.gzip.org/zlib/rfc-gzip.html#file-format}
+#' and \url{https://www.ietf.org/rfc/rfc1952}
+#' 
+#' @param filename the fully qualified name of the file to test
+#' @return logical, TRUE if the input is likely gzipped
+file_gzip <- function(filename){
+   # ID1 (IDentification 1)
+   # ID2 (IDentification 2)
+   # These have the fixed values ID1 = 31 (0x1f, \037), ID2 = 139
+   #   (0x8b, \213), to identify the file as being in gzip format.
+   
+   if (missing(filename)) stop("filename is required")
+   if (length(filename) > 1) return(sapply(filename, is.zip))
+   fi <- file.info(filename)
+   if (fi[,"isdir"]) return(FALSE)
+   
+   con <- file(filename, open = "rb")
+   x = readBin(con, "raw", size = 1, n = 2, endian = "little")
+   close(con)
+   identical(rawToChar(x, multiple = TRUE), c("\037", "\x8b"))
+}
+
+#' A wrapper around data.table::fread to handle gzipped input
+#'
+#' @param filename
+#' @param ...  further arguments for fread
+#' @return data.table object
+fread2 <- function(filename, ...){
+
+   if (file_gzip(filename[1])){
+      x <- fread(sprintf("zcat %s", filename[1]), ...)
+   } else {
+      x <- fread(filename[1], ...)
+   }
+   
+   return(x)
+}
+
+
+#' Count the number of genes in a *prodigal_genes.fasta file
+#' Conting names are compound "name_number # blah foo bar ..."
+#' We need to tabulate the "name" portion so we first split around " " and then
+#' around "_".  Yikes.
+#'
+#' @param x the name of the fasta file or list of contigs
+#' @param seps the character we use, in order, to get at the name
+#' @return a table of gene counts
+count_genes <- function(x, seps = c(" ", "_")){
+   if (!is.list(x) && file.exists(x[1]) ) x <- read_fasta(x[1])
+   nm <- strsplit(names(x), seps[1], fixed = TRUE)
+   nm <- sapply(nm, "[[", 1)
+   ix <- sapply(gregexpr(seps[2], nm, fixed = TRUE),
+      function(x){ x[length(x) ]} )
+   tt <- table(substring(nm,1, ix-1))
+   data.frame(gene_count = as.vector(tt), row.names = names(tt), stringsAsFactors = FALSE)
+}
+
+#' Tabulate the matches between the blastp descriptions and VIRAL_KEYWORDS
+#' The \code{blastp_viral_genes} function identifies the matches, this just tabulates the
+#' matches between the contigs by name.
+#' Conting names are compound "name_number # blah foo bar ..."
+#' We need to tabulate the "name" portion so we first split around " " and then
+#' around "_". 
+#'
+#' @param x named logical vector
+#' @param seps the character we use, in order, to get at the name
+#' @param name characters to prepend to the column name
+#' @return a table of phage gene counts
+count_phage_genes <- function(x, name = ""){
+   if (!is.logical(x)) stop("input must be logical")
+   if (is.null(names(x))) stop("input must be a named logical")
+   # first we reduce the data set to a list by gene - any that match
+   x1 <- sapply(split(x, names(x)), any)
+   ix <- sapply(gregexpr("_", names(x1), fixed =TRUE), function(x) x[length(x)] - 1)
+   gene_names <- substring(names(x1), 1, ix)
+   # now we split these into contig groups
+   #x2 <- split(x1, clip_name(names(x1), to = 'contig'))
+   x2 <- split(x1, gene_names)
+   x <- sapply(x2, sum)
+   nm <- if(nchar(name) > 0) paste0(name,"_","phage_gene_count") else "phage_gene_count"
+   x <- data.frame(x, row.names = names(x2),  stringsAsFactors = FALSE)
+   colnames(x) <- nm
+   x
+}
+
+#' Summarize abundance
+#'
+#' "Calculate the total number of hits per contig, and normalize that number to 
+#' the number of reads in the metagenome, and the length of the contig 
+#' (just as you did with Brandon in Swan et al., 2013)."
+#'
+#' 1. Contig names are defined in the names in the fasta file
+#' > names(F)                                  
+#' [1] "AAA164A08_contig00001_length59851" "AAAt64A08_contig00002_length17769" "AAA164A08_contig00003_length2465" 
+#' [4] "AAA164A08_contig00004_length2005"      
+#'                                             
+#' 2. Number of  hits per contig are.. in SIM_TABLE        
+#'                                             
+#' 3. Number of reads in the metagenomes are... in [Similarity_N] under readsn=...
+#'                                             
+#' 4. Length of the contig is the number of characters in each contig in the fasta file
+#' > len <- sapply(F, nchar)                   
+#' > len                                       
+#' AAA164A08_contig00001_length59851 AAA164A08_contig00002_length17769  AAA164A08_contig00003_length2465 
+#'                             59851                            17769                              2465 
+#'  AAA164A08_contig00004_length2005           
+#'                              2005           
+#'
+#' 
+#'                                   contig_len reads_POV reads_LineP hit_POV hit_LineP
+#' AAA164A08_contig00001_length59851      59851   5922080     8279226   19431     10019
+#' AAA164A08_contig00002_length17769      17769   5922080     8279226     795       299
+#' AAA164A08_contig00003_length2465        2465   5922080     8279226     273        14
+#' AAA164A08_contig00004_length2005        2005   5922080     8279226     573        26
+#'
+#' @param master the names of the contigs that must be present by row
+#' @param sim_table the similarity table
+#' @param cfg the configuration
+#' @param mult the multipliers for the fraction
+#' @param a matrix of fr ratios
+compute_fr <- function(master = MASTERNAMES,
+   sim_table = SIM_TABLE,
+   cfg = CFG, mult = 1e6){
+   
+   verify_vector <- function(v, master, missing_value = NA){
+      ix <- master %in% names(v)
+      if (any(!ix)) v[master[!ix]] <- missing_value
+      v
+   }
+   # we may have vectors short of one or more elements in master
+   # so we add the missing ones and populated them with NA
+   sim_table <- lapply(sim_table, function(x) lapply(x, verify_vector, master=master))
+   
+   contig_len <- SUMMARY[['contig_length']]
+   contig_names <- names(contig_len)
+   N <- length(contig_names)
+   ABD <- list()
+
+   sim_sets <- names(sim_table)
+   for (isim in sim_sets){
+      nsim <- length(sim_table[[isim]])
+      sim_names <- names(sim_table[[isim]])
+      read_names <- paste0("reads", 1:nsim)
+      reads <- as.numeric(unlist(cfg[[isim]][read_names]))
+      names(reads) <- sim_names
+      reads <- lapply(reads, function(x,n) {x <- rep(x,n) ; names(x) <- contig_names; x}, N) 
+      hits <- sim_table[[isim]]
+      fr <- lapply(sim_names, function(n) {
+         data.frame(hits = hits[[n]][contig_names],
+            reads = reads[[n]][contig_names],
+            fr = hits[[n]][contig_names]/(reads[[n]][contig_names] * contig_len[contig_names]) * mult)
+      })
+      names(fr) <- sim_names
+      ABD[[isim]] <- data.frame( do.call(cbind, fr),
+         row.names = contig_names, stringsAsFactors = FALSE)
+   }     
+   do.call(cbind, ABD)
+}
+     
+
+#' Summarize GC content
+#' 
+#' @param x a matrix of gc see \code{process_gccontent'}
+#' @return a data frame of ncontig observations of 3 variables
+#' Rownames of the result are the contig names
+#'  \describe{
+#'    \item{gc_content_sag}{mean of GC for all observations}
+#'    \item{gc_content_contig}{mean of GC by contig}
+#'    \item{gc_content_diff}{gc_content_sag - gc_content_contig}
+#'  }
+summarize_gccontent <- function(x){
+   if (!is.matrix(x))stop('input must be a matrix')
+   gc_content_sag<- mean(x[,'gc'], na.rm = TRUE)
+   #u <- gregexpr("_", rownames(x), fixed = TRUE)
+   #ix <- sapply(u, function(x) x[length(x)] - 1)
+   #nm <- substring(rownames(x), 1, ix)
+   #xx <- split(as.data.frame(x), nm)
+   xx <- split(as.data.frame(x), rownames(x))
+   gc_content_sag <- rep(gc_content_sag, length(xx))
+   names(gc_content_sag) <- names(xx)
+   gc_content_contig <- sapply(xx, function(x){mean(x[,'gc'], na.rm = TRUE)})
+   gc_content_diff <- gc_content_sag - gc_content_contig
+   as.data.frame(t(rbind(gc_content_sag, gc_content_contig, gc_content_diff)))
+}
+
+#' Summarize tetramerPCA
+#' 
+#' @param x matrix
+#' @return a data frame of ncontig observations of 3 variables
+#' Rownames of the result are the contig names
+#'  \describe{
+#'    \item{tetramerPCA_sag}{mean of tetramerPCA for all observations}
+#'    \item{tetramerPCA_contig}{mean of tetramerPCA by contig}
+#'    \item{tetramerPCA_diff}{tetramerPCA_sag - tetramerPCA_contig}
+#'  }
+summarize_tetramerPCA <- function(x){
+   if (!is.matrix(x))stop("input must be a matrix")
+   nm <- rownames(x)
+   xx <- split(as.data.frame(x), nm)
+   
+   teteramPCA_PC1_sag <- mean(abs(x[,'PC1']), na.rm = TRUE)
+   teteramPCA_PC1_sag <- rep(teteramPCA_PC1_sag, length(xx))
+   names(teteramPCA_PC1_sag) <- names(xx)
+   tetramerPCA_PC1_contig <- sapply(xx, function(x){mean(abs(x[,'PC1']), na.rm = TRUE)})
+   tetramerPCA_PC1_diff <- teteramPCA_PC1_sag - tetramerPCA_PC1_contig
+   
+   teteramPCA_PC2_sag <- mean(abs(x[,'PC2']), na.rm = TRUE)
+   teteramPCA_PC2_sag <- rep(teteramPCA_PC2_sag, length(xx))
+   names(teteramPCA_PC2_sag) <- names(xx)
+   tetramerPCA_PC2_contig <- sapply(xx, function(x){mean(abs(x[,'PC2']), na.rm = TRUE)})
+   tetramerPCA_PC2_diff <- teteramPCA_PC2_sag - tetramerPCA_PC2_contig  
+   
+   as.data.frame(t(rbind(teteramPCA_PC1_sag, tetramerPCA_PC1_contig, tetramerPCA_PC1_diff,
+      teteramPCA_PC2_sag, tetramerPCA_PC2_contig, tetramerPCA_PC2_diff)))
+}
+
+#' Summarize the reads of a pileup 
+#'
+#' @param x a matrix of [position, height]
+#' @param srcname the name of the data source - either 'virus', or 'bact' or 'POV', etc. or NULL to skip.  
+#"  This name will be prepended to the column names of the result
+#' @return a data.frame of ncotigs for three variables
+#' Rownames of the result are the contig names
+#'  \describe{
+#'    \item{pileup_sag}{mean of reads for all observations}
+#'    \item{pileup_contig}{mean of reads by contig}
+#'    \item{pileup_diff}{pileup_sag - pileup_contig}
+#'  }
+summarize_pileup <- function(x, srcname = NULL){
+   if (is.list(x)) x <- do.call(rbind, x)
+   if (!is.matrix(x)) stop("inut must be a matrix")
+   nm <- rownames(x)
+   ix <- gregexpr("_", nm, fixed = TRUE)
+   ix <- sapply(ix, function(x) x[length(x)]) # the last one
+   nm <- substring(nm, 1, ix-1)
+   xx <- split(as.data.frame(x), nm)
+   pileup_sag <- rep(mean(x[,2], na.rm = TRUE), length(xx))
+   names(pileup_sag) <- names(xx)
+   pileup_contig <- sapply(xx, function(x){mean(x[,2], na.rm = TRUE)})
+   pileup_diff <- pileup_sag - pileup_contig
+   y <- as.data.frame(t(rbind(pileup_sag, pileup_contig, pileup_diff)))
+   if (!is.null(srcname)) colnames(y) <- paste0(srcname[1], "_", colnames(y))
+   y
+}
+
+
+#' Craft the summary table
+#' @param x the list of summary tables
+#' @param master the names of the contigs that must be present by row
+#' @param name_order the names in which to order the contents of the input
+#' @return a data frame of the summary table
+summarize <- function(x = SUMMARY, master = MASTERNAMES,
+
+   name_order = c("contig_length", "gene_count", "viral_blastp", "viral2_blastp", "TETRAMER", names(pileups)) ){
+   #given a data frame, populate it with flag values NA or ""
+   blank_data.frame <- function(x){
+      ny <- nrow(x)
+      for (n in colnames(x)){
+         x[,n] <- switch(mode(x[,n]),
+            "numeric" = rep(NA, ny),
+            "logical" = rep(NA, ny),
+            "character" = rep("", ny),
+            rep(NA, ny))
+      }
+      x
+   }
+   # given a data frame, populate it with missing rows and return the
+   # MASTERNAMES ordered data frame
+   verify_data.frame <- function(x, m = master){
+      ix <- !(m %in% rownames(x))
+      if (any(ix)){
+         y <- blank_data.frame(x[rep(1,sum(ix)),, drop = FALSE])
+         rownames(y) <- m[ix]
+         x <- rbind(x,y)
+      }
+      x <- x[m,, drop = FALSE]
+      x
+   }
+   
+   x <- x[name_order]
+   
+   nm <- 'contig_length'
+   if (nm %in% name_order) {
+      x[[nm]] <- verify_data.frame(data.frame(contig_length = x[[nm]]))
+   }
+   
+   nm <- 'gene_count'
+   if (nm %in% name_order) {
+      x[[nm]] <- verify_data.frame(x[[nm]])
+   }
+   
+   nm <- 'viral_blastp'
+   if (nm %in% name_order){
+      x[[nm]] <- verify_data.frame(x[[nm]])
+      x[[nm]] <- data.frame(x[[nm]], 
+         viral_phage_gene_fraction = x[[nm]][,'viral_phage_gene_count']/x[['gene_count']][,'gene_count'] ) # ,
+         # viral_phage_gene_flag = rep("", nrow(x[[nm]])) )
+   }
+
+   nm <- 'viral2_blastp'
+   if (nm %in% name_order){
+      x[[nm]] <- verify_data.frame(x[[nm]])
+      x[[nm]] <- data.frame(x[[nm]], 
+         viral2_phage_gene_fraction = x[[nm]][,'viral2_phage_gene_count']/x[['gene_count']][,'gene_count']) # ,
+         # viral2_phage_gene_flag = rep("", nrow(x[[nm]])) )
+   }   
+   nm <- 'hypo_blastp'
+   if (nm %in% name_order){
+      x[[nm]] <- verify_data.frame(x[[nm]])
+      x[[nm]] <- data.frame(x[[nm]], 
+         hypothetical_phage_gene_fraction = 
+            x[[nm]][,'hypothetical_phage_gene_count']/x[['gene_count']][,'gene_count'],
+         hypothetical_phage_gene_flag = rep("", nrow(x[[nm]])) )
+   }
+   
+   
+   nm <- 'TETRAMER'
+   if (nm %in% name_order){
+      x[[nm]] <- data.frame(x[[nm]]) # , tetramerPC_flag = rep("", nrow(x[[nm]])) )
+      x[[nm]] <- verify_data.frame(x[[nm]])
+   }
+   
+   nm <- 'GC'
+   if (nm %in% name_order){
+      x[[nm]] <- data.frame(x[[nm]], GC_flag = rep("", nrow(x[[nm]])) )
+      x[[nm]] <- verify_data.frame(x[[nm]])
+   }
+   
+   if (!is.null(pileups)){
+      for (n in names(pileups)) if (n %in% name_order) {x[[n]] <- verify_data.frame(x[[n]])}   
+      x <- data.frame(do.call(cbind, unname(x)), compute_fr())
+      # The Similarity_1.POV.fr/Similarity_1.LineP.fr should be calculated in the table.
+      fr_names <- c("Similarity_1.POV.fr", "Similarity_1.LineP.fr")
+      if (all(fr_names %in% colnames(x))){
+         x <- data.frame(x, fr_ratio = x[,fr_names[1]]/x[,fr_names[2]])
+      }
+   } else {
+      x <- data.frame(x, fr_ratio = rep(NA, nrow(x[['contig_length']])) )
+   }
+   
+   if ('viral_phage_gene_fraction' %in% colnames(x)){
+      x[,'viral_score'] =  weighted_score(x[,'viral_phage_gene_fraction'], VIRAL_WEIGHTS)
+   }
+   
+   if ('fr_ratio' %in% colnames(x)){
+      x[,'fr_ratio_score'] =  weighted_score(x[,'fr_ratio'], FR_RATIO_WEIGHTS)
+   }
+   
+   if ('Similarity_1.POV.fr' %in% colnames(x)){
+      x[,'POV_fr_score'] <- weighted_score(x[,'Similarity_1.POV.fr'], POV_FR_WEIGHTS)
+   }
+   
+   score_names <- c('viral_score', 'fr_ratio_score', 'POV_fr_score')
+   if (all(score_names %in% colnames(x))){
+      s <- 0
+      for (sn in score_names) s <- s + x[,sn]
+      x[,'sum_score'] <- s
+   }
+   invisible(x)  
+}
+
+#' Write the summary table to file
+#' @param x the list of summary tables
+#' @param output the name of the output file
+write_summary <- function(x = summarize(), 
+   output = file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "-summary.csv")) ) {
+   write.csv(x, file = output, row.names = TRUE, quote = FALSE)
+}
+
+
+#' Get an argument, quit with a message if it is required but missing
+#' 
+#' @param args the argument list as per argparser::parse_args()
+#' @param name the name of the argument
+#' @param required logical, if TRUE the it must not be NA
+#' @param the argument value
+get_argument <- function(name, args = ARGS, required = TRUE){
+   if (is.na(args[[name[1]]]) && required) {
+      flog.error("argument is not defined/present: %s", name)
+      print(args)
+      gvs.quit(status = 1)
+   }
+   args[[name[1]]]
+}
+
+
+#' Determine if the specified file is defined in the config file and if it
+#' exists
+#' @param name the name of the file, eg 'fasta_file'
+#' @param the section within which the file is defined
+#' @param relative logical - are the filenames relative to INPUT_PATH?
+#' @param path if relative is TRUE then use this as the parent path
+get_file_from_config <- function(name, section = "inputs",cfg = CFG,
+   relative = get_config(CFG, section, "relative_path", default = "false") != "false",
+   path = INPUT_PATH){
+   fname <- get_config(cfg,section, name)
+   if (is.null(fname)) {
+      flog.error("config error: %s in section %s not found", name, section)
+      viralsignals_quit(status = 1)
+   }
+   if (relative) fname <- file.path(path, fname)
+   if (!file.exists(fname)){
+      flog.error("file for %s not found", fname, name)
+      viralsignals_quit(status = 1)
+   }      
+   return(fname)
+}
+
+#' Get an element of a section by name.
+#' @param x the configuration list
+#' @param section the name of the section
+#' @param name the name of the tagged value, if missing then the section is returned
+#' @param default the value to return if the tag doesn't exists (defaults to NULL)
+#' @return the tagged value or section requested or the 'default' value if not found
+get_config <- function(x, section, name, default = NULL){
+   if (nargs() < 2) stop("at least x and section are required")
+   s <- x[[section[1]]]
+   if (is.null(s)) return(default)
+   if ( !(missing(name)) ) {
+      if (name[1] %in% names(s)) return(s[[name[1]]])
+   } else {
+      return(s)
+   }
+   return(default)
+}
+ 
+#' Read a configuration file
+#' @param filename the name of the file
+#' @return a name list with one element per section
+#' each section, in turn is a named list
+read_config <- function(filename){
+   #' Parse lines of text
+   #' @param x the line(s) of text in the form of tag value pairs
+   #' @return named character vector of tag1 = value1, tag2 = value2, ...
+   parse_config_line <- function(x){
+   pat <- '[=:]'
+   ix <- regexpr(pat, x)
+   r <- vector(mode = "character")
+   for (i in seq_along(x)){
+      if (ix[i] > 0 ){
+         nm <- substring(x[i], 1, ix[i]-1)
+         # strip leading spaces
+         val <- sub("^ +", "", substring(x[i], ix[i] + 1, nchar(x[i]) ) )
+         r[[nm]] <- val
+      }
+   }
+   r
+   }
+ 
+   if (!file.exists(filename)) stop(paste("file must exist: ", filename))
+   x <- scan(filename, what = character(), quiet = TRUE, sep = "\n")
+   x <- x[!grepl("^#", x)]
+   ix <- grep("^\\[", x)
+   if (length(ix) == 0) {
+      stop("No [headers] found in config file - please check file")
+   }
+   len <- nchar(x[ix])
+   nm <- substring(x[ix], rep(2, length(len)), len-1)
+   iy <- c(ix, length(x)+1)
+   L <- list()
+   for (i in seq_along(nm)) L[[nm[i]]] <- parse_config_line(x[(iy[i] + 1) : (iy[i+1]-1) ])
+   invisible(L)
+}
+
+#' Parse a delimited string allowing for zero or more spaces after each delimiter.
+#' 
+#' @param x character, only the first element is operated upon
+#' @param sep the separator to split on, By default split on comma or tab followed by zero or more spaces
+#' @return character vector of elements of the input
+parse_csv_arg <- function(x, sep = "[,\t][[:space:]]*" ){
+    strsplit(x, sep)[[1]]
+}
+
+#' Parse weight entries in a cpnfig file to a named numeric vector
+#' For example "0:-1e6, 2:2.25, 3:5, 5:25" is parsed to 
+#' c("0" = -1e6, "2" = 2.25, "3" = 5, "5" = 25)
+#'
+#' The following is from 
+#' /mnt/scgc/share/Jessica_Data/Pipeline_Marine_SAGs/Outputs/AAA015N04.cfg
+#'
+#' # Weight criteria (based on the ratio of gene) in weight:threshold pattern
+#' # Suppose we have these criteria:
+#' # [Weights]
+#' #   SOME_WEIGHTS=0:-1e6, 2:0.2, 3:0.3, 5:0.5
+#' # We read this as ...
+#' #   if >0.2, value = 2, otherwise 0, 
+#' #   if >0.3, value = 3 + 2, otherwise 0, 
+#' #   and if >0.5, value = 5 + 3 + 2, otherwise 0. 
+#' # Therefore, a contig with a high ratio (0.8 for example) will account for 10 pts
+#' #  (2+3+5), while a virus with a low ratio (0.25) will account for only 2.
+#' VIRAL_WEIGHTS=0:-1e6, 2:0.2, 3:0.3, 5:0.5
+#' POV_FR_WEIGHTS=0:-1e6, 1:0.01, 3:0.03, 5:0.05
+#' FR_RATIO_WEIGHTS=0:-1e6, 2:2.25, 3:5, 5:25
+#'
+#' @param x a character vector
+#' @return a named numeic vector or NULL
+parse_weights <- function(x="0:-1e6, 2:2.25, 3:5, 5:25"){
+   x <- strsplit(x, ",", fixed = TRUE)[[1]]
+   xx <- strsplit(x, ":")
+   x <- as.numeric(sapply(xx, "[", 2))
+   names(x) <- sapply(xx, "[", 1)
+   x
+}
+
+#' 
+#' Score a set of values according to a weighted look-up-table
+#' Final score is cumulative in the sense that a score is the sum of 
+#' of a values score and all of the possible lower scores
+#' @param x a numeric vector of values to score
+#' @param lut the named lookup table.  
+#'    Names will be converted to numeric weights
+#' @return numeric weighted scores, one for each element of input \code{x}
+weighted_score <- function(x, 
+   lut= c('0' = -1e6, '2' = 0.2, '3' = 0.3, '5' = 0.5)){
+   ix <- findInterval(x, lut)          # where is x in the look-up-table?
+   weights <- as.numeric(names(lut))   # convert the names of weights
+   cumweights <- cumsum(weights)       # get the cumulative weights
+   cumweights[ix]                      
+}
+
+##### Functions above
+##### Script below
+
+# Rscript --vanilla graph-viral-signals.Rscript --args config_file.cfg
+DEVELMODE <- interactive()
+# use these if in devel mode
+if (DEVELMODE){
+   cat("DEVELOPMENT MODE\n")
+   arg_list <- c("/mnt/scgc_nfs/lab/jlabonte/Sievert_SAGs/Output/AD-133-F21signals.cfg")
+} else {
+   arg_list <- commandArgs(trailingOnly = TRUE)
+}
+
+VIRAL_WEIGHTS="0:-1e6, 2:0.2, 3:0.3, 5:0.5"
+POV_FR_WEIGHTS="0:-1e6, 1:0.01, 3:0.03, 5:0.05"
+FR_RATIO_WEIGHTS="0:-1e6, 2:2.25, 3:5, 5:25"
+
+VIRAL_KEYWORDS <- "phage, virus, prophage, terminase, t4-like, lambda-like, mu-like, capsid, tail, fiber, lambdoid, portal, tail, virion, lysis, podovirus, podo-like, head, baseplate, myovirus, siphovirus, structural"
+VIRAL2_KEYWORDS <- "integrase, transposase"
+
+
+SUMMARY <- list()               
+dummy <- flog.logger(name = "viralgraph")
+if (DEVELMODE) flog.info("running in DEVELMODE")
+PARSER <- arg_parser("generate diagnostics for detecting viral signals", name = "viral-signals.Rscript")
+PARSER <- add_argument(PARSER, 'config_file',
+   help = 'configuration filename (*.cfg)')
+ARGS <- parse_args(PARSER, arg_list)
+config_file <- get_argument("config_file", required = TRUE)
+if (!file.exists(config_file)){
+   flog.error("configuration file not found: %s", config_file)
+   viralsignals_quit(status = 1)
+}
+CFG <- read_config(config_file)
+
+# [keywords]
+VIRAL_KEYWORDS <- 
+    parse_csv_arg(get_config(CFG, "keywords", "VIRAL_KEYWORDS", default = VIRAL_KEYWORDS))
+VIRAL2_KEYWORDS <- 
+    parse_csv_arg(get_config(CFG, "keywords", "VIRAL2_KEYWORDS", default = VIRAL2_KEYWORDS))
+    
+# [Weights]
+VIRAL_WEIGHTS <- 
+   parse_weights(get_config(CFG, "Weights", "VIRAL_WEIGHTS", default = VIRAL_WEIGHTS))
+POV_FR_WEIGHTS <- 
+   parse_weights(get_config(CFG, "Weights", "POV_FR_WEIGHTS", default = POV_FR_WEIGHTS))
+FR_RATIO_WEIGHTS <- 
+   parse_weights(get_config(CFG, "Weights", "FR_RATIO_WEIGHTS", default = FR_RATIO_WEIGHTS))
+
+# [setup]
+INPUT_PATH <- get_config(CFG, "setup", "input_path")
+if ( is.null(INPUT_PATH) || !file.exists(INPUT_PATH) ){
+   flog.error("input_path not found: %s", INPUT_PATH)
+   viralsignals_quit(status = 1)
+}
+SAMPLE_NAME <- get_config(CFG, "setup", "name", default = basename(INPUT_PATH))
+OUTPUT_PATH <- get_config(CFG, "setup", "output_path", default = INPUT_PATH)
+if (!file.exists(OUTPUT_PATH)) {
+   ok <- dir.create(OUTPUT_PATH)
+   if (!ok){
+      flog.error("Unable to create output_path: %s", OUTPUT_PATH)
+      viralsignals_quit(status = 1)
+   }
+}
+
+# [inputs]
+relative_path <- get_config(CFG, "inputs", "relative_path", default = "false") != 'false'
+FASTA_FILE <- get_file_from_config("fasta_file", relative = relative_path, path = INPUT_PATH)
+GC_CONTENT_FILE <- get_file_from_config("gc_content_file", relative = relative_path, path = INPUT_PATH)
+PROTEINS_FILE <- get_file_from_config("proteins_file", relative = relative_path, path = INPUT_PATH)
+BLASTP_FILE <- get_file_from_config("blastp_file", relative = relative_path, path = INPUT_PATH)
+TRNA_FILE <-  get_file_from_config("trna_file", relative = relative_path, path = INPUT_PATH)
+TETRAMER_FILE <- get_file_from_config("tetramer_file", relative = relative_path, path = INPUT_PATH)
+
+# get ready to use the ramdisk
+TMPDIR <- get_temp_dir(pattern = SAMPLE_NAME)
+
+# read the input FASTA file - these contigs define the startstop offsets
+# and the grey/white pattern in the background
+flog.info("reading FASTA file: %s", FASTA_FILE)
+F <- try(read_fasta(FASTA_FILE))
+if (inherits(F, "try-error")) {
+   flog.error("error reading FASTA file")
+   viralsignals_quit(status = 1)
+}
+names(F) <- fasta_clipname(names(F), what = 'first')
+fasta_sizes <- sapply(F, nchar)
+cov <- fasta_coverage(names(F))
+ssF <- fasta_startstop(F) # referred to as offset_list in python
+if (!is.null(cov)) ssF <- cbind(ssF, cov) # append coverage if available
+xlim <- c(0, max(ssF[,'stop']))
+SUMMARY[["contig_length"]] <- fasta_sizes
+MASTERNAMES <- rownames(ssF)
+
+# read in the blastp results, make the 'genes' lists
+flog.info("reading blastp file: %s", basename(BLASTP_FILE))
+blastp <- try(read_blasttable(BLASTP_FILE))
+if (inherits(blastp, "try-error")) {
+   flog.error("error reading blastp file")
+   viralsignals_quit(status = 1)
+}
+
+flog.info("flagging viral genes in blastp results")
+blastp[,salltitles:= tolower(salltitles)]
+viral_blastp <- A_in_B(VIRAL_KEYWORDS, blastp[,salltitles])
+names(viral_blastp) <- clip_name(blastp[,qseqid], to = "gene")
+SUMMARY[['viral_blastp']] <- count_phage_genes(viral_blastp, "viral")
+viral_blastp <- names(viral_blastp)[unname(viral_blastp)]
+
+flog.info("flagging viral2 genes in blastp results")
+viral2_blastp <- A_in_B(VIRAL2_KEYWORDS, blastp[,salltitles])
+names(viral2_blastp) <- clip_name(blastp[,qseqid], to = "gene")
+SUMMARY[['viral2_blastp']] <- count_phage_genes(viral2_blastp, "viral2")
+viral2_blastp <- names(viral2_blastp)[unname(viral2_blastp)]
+
+
+flog.info("flagging hypothetical viral genes in blastp results")
+hypo_blastp <- A_in_B('hypothetical', blastp[,salltitles])
+names(hypo_blastp) <- clip_name(blastp[,qseqid], to = "gene")
+SUMMARY[['hypo_blastp']] <- count_phage_genes(hypo_blastp, "hypothetical")
+
+hypo_blastp <- names(hypo_blastp)[unname(hypo_blastp)]
+
+# save a convenience 'key' to the start-stop locations for the input fasta contigs
+dummy <- data.frame(ID = seq_along(rownames(ssF)), name = rownames(ssF), ssF, stringsAsFactors = FALSE)
+ff <- file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "_contig-key.csv"))
+write.csv(dummy, file = ff, quote = FALSE, row.names = FALSE)
+
+# read the proteins contig file AS IS
+flog.info("reading proteins FASTA file: %s", basename(PROTEINS_FILE))
+P <- try(read_fasta(PROTEINS_FILE))
+if (inherits(P, "try-error")) {
+   flog.error("error reading protein FASTA file")
+   viralsignals_quit(status = 1)
+}
+SUMMARY[['gene_count']] <- count_genes(P)
+Pnames <- fasta_clipname(names(P), what = 'first')
+ssP <- protein_startstop(P)
+rownames(ssP) <- Pnames
+
+# get similiarity data if any
+# unlike pileups, a similarity plot may contain one or more datasets
+SIM_TABLE <- list()
+nm <- names(CFG)
+isim <- grep("Similarity", nm)
+sims <- NULL
+if (length(isim) > 0){
+   flog.info("processing similarity")
+   sim_list <- CFG[nm[isim]]
+   sims <- list()
+   simNames <- names(sim_list)
+   # for each Similarity we may have one or more names to process
+   for (jsim in seq_along(sim_list)){
+      iname <- grep("name", names(sim_list[[jsim]]), fixed = TRUE)
+      sim_names <- sim_list[[jsim]][iname]
+      
+      iflag <- grep("flag", names(sim_list[[jsim]]), fixed = TRUE)
+      sim_flags <- sim_list[[jsim]][iflag]
+      idir <- grep("dir", names(sim_list[[jsim]]), fixed = TRUE)
+      sim_dirs <- sim_list[[jsim]][idir]
+      sim_files <- list()
+      for (i in seq_along(sim_names)){
+         sim_files[[sim_names[i]]] <- 
+            if (grepl("*", sim_flags[[i]], fixed = TRUE)) {
+               list.files(sim_dirs[[i]], 
+                  pattern = glob2rx(sim_flags[[i]]), 
+                  full.names = TRUE)
+            } else {
+               file.path(sim_dirs[[i]], sim_flags[[i]])
+            }
+      }
+
+      # yank the ones that are empty
+      sim_files <- lapply(sim_files, function(x) {
+         ix <- file_empty(x)
+         if (all(ix)) return(NULL) else return(x[!ix])
+         }
+      )
+      sim_files <- sim_files[sapply(sim_files, function(x) !is.null(x) )]
+      if (length(sim_files) > 0){
+         sim_data <- lapply(sim_files, function(x) lapply(x, read_sim))
+         SIM_TABLE[[simNames[jsim]]] <- lapply(sim_data,  
+               function(s){
+                  it <- table(protein_clipname(s[[1]][,sseqid]))
+                  x <- as.vector(it) ; names(x) <- names(it)
+                  x
+               }
+         )
+         sims[[simNames[jsim]]] <- lapply(sim_data, function(x) lapply(x, process_similarity, ssP, ssF))  
+      } else {
+         sims <- NULL
+      }
+      sim_data <- NULL          
+   } # jsims
+} else {
+   sims <- NULL
+}
+
+# get the pileup data if any
+# pileups plot one dataset per plot
+nm <- names(CFG)
+ipileup <- grep("Pileup", nm)
+pileups <- NULL
+if (length(ipileup) > 0) {
+   flog.info("processing pileups")
+   pileup_list <- CFG[nm[ipileup]]
+   pileup_names <- sapply(pileup_list, "[[", "name")
+   pileup_flags <- sapply(pileup_list, "[[", "flag")
+   pileup_dirs <- sapply(pileup_list, "[[", 'dir')
+   pileup_files <- list()
+   for (i in seq_along(pileup_names)){
+      pileup_files[[pileup_names[i]]] <- 
+         if (grepl("*", pileup_flags[[i]], fixed = TRUE)){
+            list.files(pileup_dirs[[i]], 
+               pattern = glob2rx(pileup_flags[[i]]), 
+               full.names = TRUE)
+         } else {
+            file.path(pileup_dirs[[i]], pileup_flags[[i]])
+         }
+   }
+   # yank the ones that are empty
+   flog.info("identifying empty pileups")
+   pileup_files <- lapply(pileup_files, function(x) {
+      ix <- file_empty(x)
+      if (all(ix)) return(NULL) else return(x[!ix])
+      }
+   )
+   pileup_files <- pileup_files[sapply(pileup_files, function(x) !is.null(x) )]
+
+   
+   if (length(pileup_files) > 0) {
+      flog.info("reading pileups")
+      pileups <- lapply(pileup_files, function(x) lapply(x, process_pileup, ssP, ssF))
+   } else {
+      flog.info("no non-empty pileups to read")
+      pileups <- NULL
+   }
+} else {
+   pileups <- NULL
+} 
+
+if (!is.null(pileups)){
+   flog.info("summarizing pileups")
+   for (p in names(pileups)) SUMMARY[[p]] <- summarize_pileup(pileups[[p]], p)
+} else {
+   flog.info("no pileups to summarize")
+   for (p in names(pileups)) SUMMARY[[p]] <- NULL
+}
+   
+# now we can process the remaining bits and pieces
+flog.info("processing tetramer: %s", basename(TETRAMER_FILE))
+tetramer <- try(process_tetramer(TETRAMER_FILE, ssF))
+if (inherits(tetramer, "try-error")) {
+   flog.error("error processing tetramer file")
+   viralsignals_quit(status = 1)
+}
+SUMMARY[['TETRAMER']] <- summarize_tetramerPCA(tetramer)
+
+flog.info("processing tRNA scan file: %s", basename(TRNA_FILE) )
+trna <- try(process_trna_scan(TRNA_FILE , ssF))
+if (inherits(trna, "try-error")) {
+   flog.error("error processing trna file")
+   viralsignals_quit(status = 1)
+}
+
+flog.info("processing proteins for viral genes")
+if (!is.null(viral_blastp) && (length(viral_blastp) > 0)){
+   viral_protein <- process_proteins(ssP, ssF, viral_blastp)
+} else {
+   flog.info("    no viral genes found")
+   viral_protein <- NULL
+}
+
+flog.info("processing proteins for viral2 genes")
+if (!is.null(viral2_blastp) && (length(viral2_blastp) > 0)){
+   viral2_protein <- process_proteins(ssP, ssF, viral2_blastp)
+} else {
+   flog.info("    no viral2 genes found")
+   viral2_protein <- NULL
+}
+
+flog.info("processing proteins for hypothetical viral genes")
+if (!is.null(hypo_blastp) && (length(hypo_blastp) > 0)){
+   hypo_protein <- process_proteins(ssP, ssF, hypo_blastp)
+} else {
+   flog.info("    no hypothetical viral genes found")
+   hypo_protein <- NULL
+}
+
+# GC content and skew are sampled (otherwise it's too much info?)
+flog.info("processing GC content: %s", basename(GC_CONTENT_FILE))
+gc <- process_gccontent(GC_CONTENT_FILE, ssF, sampling_rate = 500)
+gc <- gc[order(gc[,'x']),]
+SUMMARY[['GC']] <- summarize_gccontent(gc)
+
+flog.info("saving summary table")
+x <- summarize()
+the_summary <- write_summary(x)
+
+flog.info("making graphics")
+filename = file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, ".pdf"))
+
+if (!is.null(sims) || !is.null(pileups)){
+   ok <- try(do_plot(filename))
+   if (inherits(ok, "try-error")){
+      flog.error("error processing making graphics")
+      viralsignals_quit(status = 1)
+   }
+} else {
+   flog.warn("Plot not created")
+   if (is.null(sims)) flog.warn("   sims missing")
+   if (is.null(pileups)) flog.warn("   pileups missing")
+}
+  
+if (!remove_dir(TMPDIR)){
+   flog.warn("Unable to remove temporary directory: %s", TMPDIR)
+}
+flog.info("done!")
+if (DEVELMODE){   
+} else {
+   viralsignals_quit(status = 0)
+}

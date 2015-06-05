@@ -21,7 +21,9 @@ python setup.py install
     + [Biostrings](http://www.bioconductor.org/packages/release/bioc/html/Biostrings.html)
     + [argparser](https://bitbucket.org/djhshih/argparser)
 + graphsignals
-    + its dependencies
+    + [futile.logger](https://github.com/zatonovo/futile.logger)
+    + [data.table](https://github.com/Rdatatable/data.table)
+    + [argparser](https://bitbucket.org/djhshih/argparser)
 
 # Usage
 ```

@@ -3,7 +3,7 @@
 # 
 # Usage: 
 #
-# $ Rscript --vanilla viralgraph.Rscript configfle
+# $ Rscript --vanilla graphsignals.Rscript configfle
 
 # This will print the stack trace at the time of the error.
 options(error = function() traceback(2))

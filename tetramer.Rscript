@@ -1,0 +1,600 @@
+# tetramer.Rscript
+#
+# Given a FASTA file with one or more contigs, perform tetramer analysis with a 
+# sliding window.  Outputs a table of PC eigenvalues for first 8 PCs.  Sui
+#
+# Usage: $ Rscript --vanilla tetramer.Rscript -input filename.fasta -output filename-tetramer-PC.csv -step 200 -window 1600
+# Help: $ Rscript --vanilla tetramer.Rscript
+# convenience global option
+options(stringsAsFactors = FALSE)
+
+# comes with base installion of R
+library(methods)
+
+# http://www.bioconductor.org/packages/release/bioc/html/Biostrings.html
+library(Biostrings, quietly = TRUE, verbose = FALSE, warn.conflicts = FALSE)
+
+# https://bitbucket.org/djhshih/argparser
+library(argparser, quietly = TRUE)
+
+# convenience globals in one list
+TETRA <- list(
+   PICK = structure(c(2, 2, 2, 2, 2, 2, 2, 2), .Names = c("PC1", "PC2", 
+         "PC3", "PC4", "PC5", "PC6", "PC7", "PC8")) ,
+   LETTERS = structure(c(1, 2, 3, 4), .Names = c("A", "C", "G", "T")), 
+   UTETRAMERS = structure(1:256, .Names = c("AAAA", 
+      "AAAC", "AAAG", "AAAT", "AACA", "AACC", "AACG", "AACT", "AAGA", 
+      "AAGC", "AAGG", "AAGT", "AATA", "AATC", "AATG", "AATT", "ACAA", 
+      "ACAC", "ACAG", "ACAT", "ACCA", "ACCC", "ACCG", "ACCT", "ACGA", 
+      "ACGC", "ACGG", "ACGT", "ACTA", "ACTC", "ACTG", "ACTT", "AGAA", 
+      "AGAC", "AGAG", "AGAT", "AGCA", "AGCC", "AGCG", "AGCT", "AGGA", 
+      "AGGC", "AGGG", "AGGT", "AGTA", "AGTC", "AGTG", "AGTT", "ATAA", 
+      "ATAC", "ATAG", "ATAT", "ATCA", "ATCC", "ATCG", "ATCT", "ATGA", 
+      "ATGC", "ATGG", "ATGT", "ATTA", "ATTC", "ATTG", "ATTT", "CAAA", 
+      "CAAC", "CAAG", "CAAT", "CACA", "CACC", "CACG", "CACT", "CAGA", 
+      "CAGC", "CAGG", "CAGT", "CATA", "CATC", "CATG", "CATT", "CCAA", 
+      "CCAC", "CCAG", "CCAT", "CCCA", "CCCC", "CCCG", "CCCT", "CCGA", 
+      "CCGC", "CCGG", "CCGT", "CCTA", "CCTC", "CCTG", "CCTT", "CGAA", 
+      "CGAC", "CGAG", "CGAT", "CGCA", "CGCC", "CGCG", "CGCT", "CGGA", 
+      "CGGC", "CGGG", "CGGT", "CGTA", "CGTC", "CGTG", "CGTT", "CTAA", 
+      "CTAC", "CTAG", "CTAT", "CTCA", "CTCC", "CTCG", "CTCT", "CTGA", 
+      "CTGC", "CTGG", "CTGT", "CTTA", "CTTC", "CTTG", "CTTT", "GAAA", 
+      "GAAC", "GAAG", "GAAT", "GACA", "GACC", "GACG", "GACT", "GAGA", 
+      "GAGC", "GAGG", "GAGT", "GATA", "GATC", "GATG", "GATT", "GCAA", 
+      "GCAC", "GCAG", "GCAT", "GCCA", "GCCC", "GCCG", "GCCT", "GCGA", 
+      "GCGC", "GCGG", "GCGT", "GCTA", "GCTC", "GCTG", "GCTT", "GGAA", 
+      "GGAC", "GGAG", "GGAT", "GGCA", "GGCC", "GGCG", "GGCT", "GGGA", 
+      "GGGC", "GGGG", "GGGT", "GGTA", "GGTC", "GGTG", "GGTT", "GTAA", 
+      "GTAC", "GTAG", "GTAT", "GTCA", "GTCC", "GTCG", "GTCT", "GTGA", 
+      "GTGC", "GTGG", "GTGT", "GTTA", "GTTC", "GTTG", "GTTT", "TAAA", 
+      "TAAC", "TAAG", "TAAT", "TACA", "TACC", "TACG", "TACT", "TAGA", 
+      "TAGC", "TAGG", "TAGT", "TATA", "TATC", "TATG", "TATT", "TCAA", 
+      "TCAC", "TCAG", "TCAT", "TCCA", "TCCC", "TCCG", "TCCT", "TCGA", 
+      "TCGC", "TCGG", "TCGT", "TCTA", "TCTC", "TCTG", "TCTT", "TGAA", 
+      "TGAC", "TGAG", "TGAT", "TGCA", "TGCC", "TGCG", "TGCT", "TGGA", 
+      "TGGC", "TGGG", "TGGT", "TGTA", "TGTC", "TGTG", "TGTT", "TTAA", 
+      "TTAC", "TTAG", "TTAT", "TTCA", "TTCC", "TTCG", "TTCT", "TTGA", 
+      "TTGC", "TTGG", "TTGT", "TTTA", "TTTC", "TTTG", "TTTT")), 
+   TETRAMERS = c("AAAA", 
+      "AAAC", "AAAG", "AAAT", "AACA", "AACC", "AACG", "AACT", "AAGA", 
+      "AAGC", "AAGG", "AAGT", "AATA", "AATC", "AATG", "AATT", "ACAA", 
+      "ACAC", "ACAG", "ACAT", "ACCA", "ACCC", "ACCG", "ACCT", "ACGA", 
+      "ACGC", "ACGG", "ACGT", "ACTA", "ACTC", "ACTG", "AGAA", "AGAC", 
+      "AGAG", "AGAT", "AGCA", "AGCC", "AGCG", "AGCT", "AGGA", "AGGC", 
+      "AGGG", "AGTA", "AGTC", "AGTG", "ATAA", "ATAC", "ATAG", "ATAT", 
+      "ATCA", "ATCC", "ATCG", "ATGA", "ATGC", "ATGG", "ATTA", "ATTC", 
+      "ATTG", "CAAA", "CAAC", "CAAG", "CACA", "CACC", "CACG", "CAGA", 
+      "CAGC", "CAGG", "CATA", "CATC", "CATG", "CCAA", "CCAC", "CCAG", 
+      "CCCA", "CCCC", "CCCG", "CCGA", "CCGC", "CCGG", "CCTA", "CCTC", 
+      "CGAA", "CGAC", "CGAG", "CGCA", "CGCC", "CGCG", "CGGA", "CGGC", 
+      "CGTA", "CGTC", "CTAA", "CTAC", "CTAG", "CTCA", "CTCC", "CTGA", 
+      "CTGC", "CTTA", "CTTC", "GAAA", "GAAC", "GACA", "GACC", "GAGA", 
+      "GAGC", "GATA", "GATC", "GCAA", "GCAC", "GCCA", "GCCC", "GCGA", 
+      "GCGC", "GCTA", "GGAA", "GGAC", "GGCA", "GGCC", "GGGA", "GGTA", 
+      "GTAA", "GTAC", "GTCA", "GTGA", "GTTA", "TAAA", "TACA", "TAGA", 
+      "TATA", "TCAA", "TCCA", "TCGA", "TGAA", "TGCA", "TTAA"), 
+   RCTETRAMERS = structure(c("ACTT", 
+      "AGGT", "AGTT", "ATCT", "ATGT", "ATTT", "CAAT", "CACT", "CAGT", 
+      "CATT", "CCAT", "CCCT", "CCGT", "CCTG", "CCTT", "CGAT", "CGCT", 
+      "CGGG", "CGGT", "CGTG", "CGTT", "CTAT", "CTCG", "CTCT", "CTGG", 
+      "CTGT", "CTTG", "CTTT", "GAAG", "GAAT", "GACG", "GACT", "GAGG", 
+      "GAGT", "GATG", "GATT", "GCAG", "GCAT", "GCCG", "GCCT", "GCGG", 
+      "GCGT", "GCTC", "GCTG", "GCTT", "GGAG", "GGAT", "GGCG", "GGCT", 
+      "GGGC", "GGGG", "GGGT", "GGTC", "GGTG", "GGTT", "GTAG", "GTAT", 
+      "GTCC", "GTCG", "GTCT", "GTGC", "GTGG", "GTGT", "GTTC", "GTTG", 
+      "GTTT", "TAAC", "TAAG", "TAAT", "TACC", "TACG", "TACT", "TAGC", 
+      "TAGG", "TAGT", "TATC", "TATG", "TATT", "TCAC", "TCAG", "TCAT", 
+      "TCCC", "TCCG", "TCCT", "TCGC", "TCGG", "TCGT", "TCTA", "TCTC", 
+      "TCTG", "TCTT", "TGAC", "TGAG", "TGAT", "TGCC", "TGCG", "TGCT", 
+      "TGGA", "TGGC", "TGGG", "TGGT", "TGTA", "TGTC", "TGTG", "TGTT", 
+      "TTAC", "TTAG", "TTAT", "TTCA", "TTCC", "TTCG", "TTCT", "TTGA", 
+      "TTGC", "TTGG", "TTGT", "TTTA", "TTTC", "TTTG", "TTTT"), .Names = c("AAGT", 
+      "ACCT", "AACT", "AGAT", "ACAT", "AAAT", "ATTG", "AGTG", "ACTG", 
+      "AATG", "ATGG", "AGGG", "ACGG", "CAGG", "AAGG", "ATCG", "AGCG", 
+      "CCCG", "ACCG", "CACG", "AACG", "ATAG", "CGAG", "AGAG", "CCAG", 
+      "ACAG", "CAAG", "AAAG", "CTTC", "ATTC", "CGTC", "AGTC", "CCTC", 
+      "ACTC", "CATC", "AATC", "CTGC", "ATGC", "CGGC", "AGGC", "CCGC", 
+      "ACGC", "GAGC", "CAGC", "AAGC", "CTCC", "ATCC", "CGCC", "AGCC", 
+      "GCCC", "CCCC", "ACCC", "GACC", "CACC", "AACC", "CTAC", "ATAC", 
+      "GGAC", "CGAC", "AGAC", "GCAC", "CCAC", "ACAC", "GAAC", "CAAC", 
+      "AAAC", "GTTA", "CTTA", "ATTA", "GGTA", "CGTA", "AGTA", "GCTA", 
+      "CCTA", "ACTA", "GATA", "CATA", "AATA", "GTGA", "CTGA", "ATGA", 
+      "GGGA", "CGGA", "AGGA", "GCGA", "CCGA", "ACGA", "TAGA", "GAGA", 
+      "CAGA", "AAGA", "GTCA", "CTCA", "ATCA", "GGCA", "CGCA", "AGCA", 
+      "TCCA", "GCCA", "CCCA", "ACCA", "TACA", "GACA", "CACA", "AACA", 
+      "GTAA", "CTAA", "ATAA", "TGAA", "GGAA", "CGAA", "AGAA", "TCAA", 
+      "GCAA", "CCAA", "ACAA", "TAAA", "GAAA", "CAAA", "AAAA")))
+
+
+#' Tidy an input FASTA string
+#'
+#' @param x the input contig sequence OR a simple string
+#' @param dict character, the dictionary of allowed characters
+#' @param replacement character, the replacement value for disallowed characters
+#' @return either a contig squence or a character string - matches the input
+clean_sequence <- function(x, dict = Biostrings::DNA_ALPHABET, replacement = "N"){
+
+  if (inherits(x, "XStringSet")) {
+      
+      uletters <- Biostrings::uniqueLetters(x)
+      ok <- !(uletters %in% dict)
+      
+      if (any(ok)) {
+         old <- uletters[ok]
+         new <- rep(replacement, length(old))
+         x <- chartr(old, new, x)
+      }
+   
+   } else {
+   
+      x <- (strsplit(toupper(x), "", fixed = TRUE))[[1]]
+      ix <- x %in% dict
+      x[!ix] <- replacement
+      paste(x, collapse = "", sep = "")
+   
+   }
+   
+   return(x)
+}
+
+#' Read a FASTA file, and possibly tidy it.
+#' 
+#' @param filename the name of the FASTA formatted file, maybe be gzipped
+#' @param clean logical, if TRUE then clean up the input, see \code{clean_sequence}
+#' @return a DNAStringSet or NULL
+read_fasta <- function(filename, clean = TRUE){
+   
+   x <- try(Biostrings::readBStringSet(filename[1]))
+   if (inherits(x, "try-error")) {
+      tetramer_quit(sprintf("Biostrings::readBStringSet error reading file: %s",
+         filename[1]), status = 1)
+   }
+      
+      
+   if (clean) {
+      x <- clean_sequence(x)
+   } else {
+      # at least get everything into the same case 
+      old <- paste0(tolower(DNA_ALPHABET), collapse = "")
+      new <- paste0(DNA_ALPHABET, collapse = "")
+      x <- chartr(old, new, x)
+   }
+   
+   x <- try(Biostrings::DNAStringSet(x))
+   if (inherits(x, "try-error")) {
+      tetramer_quit("error casting to Biostrings::DNAStringSet", status = 1)
+   }
+   invisible(x)
+}
+
+#' Tabulate the tetramers within a window advanced by step
+#' 
+#' This generally is called with a DNAStringSet, and then is called recursively
+#' with DNAString.  
+#' 
+#' @export
+#' @param x a DNAStringSet (or DNAString)
+#' @param tWindow numeric, the width of the sliding window in base units
+#' @param tStep numeric, the number of bases to advance between successive window locations
+#' @param tWidth numeric, the width of the genome unit, for tetramer analysis it's 4
+#' @return for each DNAString a list of \code{status} (0/1 where 0 = ok) and \code{x} a
+#'    tabulation matrix.  In the matrix each row corresponds to a window location along
+#'    the length of the sequence.    
+tabulateWindows <- function(x, 
+   tWindow = 1600, tStep = 200, tWidth = 4){
+   
+   if (inherits(x, "XString")){
+      
+      DNALETTERS <- TETRA[["LETTERS"]]
+      UTETRAMERS <- TETRA[["UTETRAMERS"]]
+      nutet <- length(UTETRAMERS)
+      tetnm <- names(UTETRAMERS)
+      N <- length(x)
+      starts <- seq.int(from = 0, to = tWindow - tWidth)
+      nstarts <- length(starts)
+      
+      if ( N >= tWindow ) {
+         nstep <- ( ( N-tWindow ) %/% tStep ) + 1
+         M <- matrix(0, nrow = nstep, ncol = nutet)
+         colnames(M) <- tetnm 
+         nm <- vector(mode = "character", length = nstep)
+         
+         for (istep in seq_len(nstep)){
+            #compute where we are along the contig sequence
+            s0 <- (istep-1) * tStep + 1
+            # compute ends from reusable starts
+            s1 <- s0 + starts
+            #make the name
+            nm[istep] <- paste(s1[1], s1[nstarts] + tWidth - 1 , sep = "-")
+            # split the string into tetramers
+            s <- as.character(Biostrings::DNAStringSet(x, start = s1, width = tWidth))
+            # filter for only combinations of AGCT, stuff those into the matrix
+            ix <- match(s, tetnm, nomatch = 0)
+            M[istep, ] <- tabulate(ix, nbins = nutet)
+            
+         } # istep-loop
+         
+         rownames(M) <- nm
+         tab <- list(status = 0, x = M)
+         
+      } else {  # now what to do with short ones .... N < tWindow
+         # generate a table of the bases present
+         tab <- Biostrings::letterFrequency(x, names(DNALETTERS))
+         tab <-  list(status = 1, x = tab)
+            
+      }
+      
+   } else if (inherits(x, "XStringSet")) {
+   
+      tab <- lapply(x, tabulateWindows, tWindow = tWindow, 
+         tStep = tStep, tWidth = tWidth)       
+   }
+
+   return(tab)
+}
+
+
+#' Normalize the tetra sequences
+#'
+#' This function normalizes the tetramer counts by window locations
+#' You can visualize each window location by one row of the census matrix
+#' Normalization occurs across each row, with the max count scoring the highest
+#' value toward 1.0 and the least represented as toward 0.0.  
+#' If there are no hits of the any TETRAMERS (all Ns in the original)
+#' then the normalized score for each tetramer in the row is 0.
+#' 
+#' @export
+#' @param x a list of matrices or a single matrix
+#' @return a list or matrix of the same form as the input
+normalizeTetra <- function(x){
+   if (is.matrix(x)) {
+   
+      s <- rowSums(x, na.rm = TRUE)
+      ix <- (s <= 0)
+      x <- sweep(x, 1, s, "/")
+      x[ix,] <- 0
+   } else {
+      x <- lapply(x, normalizeTetra)
+   }
+   return(x)
+}
+
+#' Reduce the tetra census table to include just the 136 complements (for tetramers)
+#'
+#' This function normalizes the tetramer counts by window locations
+#' You can visualize each window location by one row of the census matrix
+#' Normalization occurs across each row, with the max count scoring the highest
+#' value toward 1.0 and the least represented as toward 0.0.  
+#' If there are no hits of the any TETRAMERS (all Ns in the original)
+#' then the normalized score for each tetramer in the row is 0.
+#' 
+#' @param x a list of matrices or a single matrix (nWindow x 256)
+#' @param comp a named character vector of reverse complements
+#' @param keep a chracter vector of name tetramers to retain
+#' @return a list or matrix with just 136 columns
+reduceTetra <- function(x, comp = TETRA[["RCTETRAMERS"]], 
+   keep = TETRA[["TETRAMERS"]]){
+   if (is.matrix(x)){
+      nm <- names(comp)
+      x[,nm] <- x[,nm, drop = FALSE] + x[,comp, drop = FALSE]
+      x <- x[,keep, drop = FALSE]
+   } else {
+      x <- lapply(x, reduceTetra, comp = comp, keep = keep)
+   }
+   return(x)
+}
+
+#' Bind a list of tetra matrices to one matrix (n x 136)
+#'
+#' @param x a list of tetramer matrices
+#' @return a matrix with uniquely named rows
+bindTetra <- function(x){
+   # this seems to be the most fool proof way to prepend the contig name to 
+   # the name of each window
+   nm <- names(x)
+   for (n in nm)  rownames(x[[n]]) <- paste0(n, "_", rownames(x[[n]]))
+   do.call(rbind, x)
+}
+
+#' Perform Principal Component Analysis on the normalized, reduced, tetramer matrix
+#' 
+#' @param x numeric, the (n x 136) matrix of normalized counts
+#' @param scale. see \code{prcomp}
+#' @param ... further arguments for \code{prcomp}
+pcaTetra  <- function(x, scale. = TRUE, ...){
+      xcols <- apply(x, 2, sum)
+      x <- x[,xcols > 0]
+      PC <- try(prcomp(x, scale. = scale., ...))
+      if (inherits(PC, "try-error")){
+         cat(str(x), "\n")
+         return(list())
+      }
+      class(PC) <- list("list", "prcomp")
+      invisible(PC)
+}
+
+#' Parse the name of a contig, we have to jump through hoops because
+#' we scan for the last instance of the seprator
+#'
+#' Given the contig-window names "blahblah_1-5000" return a 2 element
+#' character vector of c("blahblah", "1-5000")
+#' 
+#' @param x character vector of contig names
+#' @param sep character separator around which the component names are split
+#' @return a nrowx2 character array
+decomposeContigNames <- function(x, sep = "_"){
+   ix <- gregexpr("_", x)
+   last_ <- function(x) return(x[length(x)])
+   lastIx <- sapply(ix, last_)
+   split_ <- function(x, i) substring(x, c(1,i+1), c(i-1,nchar(x)))
+   t(mapply(split_, x, lastIx))
+}
+
+
+#' Retrieve the window specification from a window name.
+#' 
+#' @param x the raw data
+#' @param windowName the full name of the window ("contigName_start-end")
+#' @param delim the delimiter between the start and end of the window
+#' @return the sequence within the window
+getBlastWindow <- function(x, windowName = "unknown_1-5000", delim = "-"){
+   s <- decomposeContigNames(windowName)
+   ss <- as.numeric(unlist(strsplit(s[2], delim)))
+   as.character(x[[s[1]]][ss[1]:ss[2]])
+}
+
+#' Selects the outliers for PCs 1-nPC.  
+#'
+#' From each PC we select PICK["PCN"] items
+#'
+#' @param P prcomp object 
+#' @param pick a named numeric vector of the number of outliers to pick from each PC
+#' @param nPC numeric, the number of PC components to use.
+#' @return a list of the selection (list of contig window names) and of the data split into data frames
+selectOutliers <- function(P, pick = TETRA[["PICK"]], nPC = length(TETRA[["PICK"]]) ){
+
+   if (!inherits(P,"prcomp")) stop("Input must be prcomp class")
+   
+   x <- P$x[,1:nPC]
+   
+   windowNames <- decomposeContigNames(rownames(x))
+   contigNames <- unlist(windowNames[,1])
+   ff <- factor(contigNames)
+   s <- split(as.data.frame(x), ff)
+   w <- split(unlist(rownames(x)), ff)
+   
+   contigNames <- names(s)
+   
+   #getRange <- function(x, what="PC1") range(x[,what])
+   # returns a named vector of [windowName1 = min, windowName2 = max]
+   # for example...
+   # z = lapply( s, getRange, PC[iPC])
+   # > head(z)
+   # $CLC_contig_10
+   # CLC_contig_10_1-5000 CLC_contig_10_5501-10500 
+   #            16.058450                 1.140951 
+   getRange <- function(x, what="PC1"){
+      ix <- order(x[,what])
+      rn <- rownames(x)
+      n <- length(rn)
+      z = c(x[ix[1],what],x[ix[n],what])
+      names(z) <- rn[ix[c(1,n)]]
+      return(z)
+   }
+   
+   # given a list of vectors, as returned by getRange above
+   # return the same elements by ordered by 'what' which can be
+   # either min or max, an example...
+   # > zz = orderBy(z, "max", decreasing = TRUE)
+   # > head(zz)
+   # $CLC_contig_10
+   # CLC_contig_10_5501-10500     CLC_contig_10_1-5000 
+   #                 1.140951                16.058450 
+   # 
+   # $CLC_contig_2
+   # CLC_contig_2_35001-40000 CLC_contig_2_23001-28000 
+   #                -5.525168                15.429272 
+   orderBy <- function(x, what = "min", decreasing = FALSE){
+      # the second element of each list is max
+      iw <- if (what == "min")  1 else 2
+      v <- sapply(x, "[", iw)
+      iv <- order(v, decreasing = decreasing)
+      return(x[iv])
+   }
+   
+   # given a vector of names items, return the name of either the first (min)
+   # or second (max) item
+   getNames <- function(x, what = "min"){
+      iw <- if(what == "min")  1 else 2
+      names(x)[iw]
+   }
+   
+   PC <- names(pick)
+   R <- list()
+   for ( iPC in seq(1, nPC, by = 2)){
+      n1 <- pick[PC[iPC]]
+      
+      # first step is to get the most extreme
+      rangeS <- lapply( s, getRange, PC[iPC])
+      hi1 <- orderBy(rangeS,what = "max", decreasing = TRUE)
+      hi <- sapply(hi1[1:n1], getNames, what = "max")
+      # now get the next, but exclude the selection above
+      hiContig <- decomposeContigNames(hi)[,1]
+      ix <- names(rangeS) %in% hiContig  
+      lo1 <- orderBy(rangeS[!ix],what = "min", decreasing = FALSE)
+      lo <- sapply(lo1[1:n1], getNames, what = "min")
+      
+      R[[PC[iPC]]] <- list(hi = names(hi), 
+         hiWindow = unname(hi),
+         lo = names(rev(lo)),
+         loWindow = unname(rev(lo)))
+       
+      
+      nm1 <- c(R[[PC[iPC]]]$hi, R[[PC[iPC]]]$lo)
+      n2 <- pick[PC[iPC+1]]
+      
+      rangeS <- lapply( s[!(contigNames %in% nm1 )], getRange, PC[iPC+1])
+      hi2 <- orderBy(rangeS,what = "max", decreasing = TRUE)
+      hi <- sapply(hi2[1:n1], getNames, what = "max")
+      ix <- names(rangeS) %in% hiContig
+      lo1 <- orderBy(rangeS[!ix],what = "min", decreasing = FALSE)
+      lo <- sapply(lo1[1:n2], getNames, what = "min")
+      
+      R[[PC[iPC+1]]] <- list(hi = names(hi), 
+         hiWindow = unname(hi),
+         lo = names(rev(lo)),
+         loWindow = unname(rev(lo)))
+
+      
+   } #iPC
+   
+   return(list(x = s, r = R))
+
+}
+
+#' Write outliers in FASTA format
+#'
+#' @param T tabulated data - see \code{tabulate_rawdata}
+#' @param X the raw data (DNAStringSet)
+#' @param filename the name of the output file
+#' @param ncol the maximum width for the output
+write_TetraOutliers <- function(T, X, filename = "outliers.fasta", ncol = 80){
+   
+   #unpack the names of the outliers
+   z <- T[['outliers']][['r']]
+   hi <- unname(unlist(sapply(z, "[", "hiWindow")))
+   lo <- unname(unlist(sapply(z, "[", "loWindow")))
+   rr <- unique(c(hi,lo))
+   
+   ff <- file(filename[1], open = "wt")
+   
+   write_TetraOutliersOne <- function(r, raw, ff, ncol){
+      cat(">", r, "\n", file = ff,sep = "")
+      x <- getBlastWindow(raw, r)
+      nx <- nchar(x)
+      ix <- seq(from = 1, to = nx, by = ncol)
+      iy <- seq(from = ncol, to = nx, by = ncol)
+      if (iy[length(iy)] < nx) iy <- c(iy, nx)
+      xs <- Biostrings::DNAStringSet(x, start = ix, end = iy)
+      cat(as.character(xs), sep = "\n", file = ff)
+      return(TRUE)
+   }
+   
+   ok <- sapply(rr, write_TetraOutliersOne, X, ff, ncol)
+   close(ff)
+   if (interactive()) cat("wrote", filename, "\n")
+   invisible(all(ok))
+}
+
+
+#' Write outliers in PC eigenvalues to CSV
+#'
+#' @param T tabulated data - see \code{tabulate_rawdata}
+#' @param filename the name of the output file
+#' @param nPC the number of components to write, by default the number in \code{TETRA[['PICK']]}
+#' @param digits numeric, the output is run through \code{\link{signif}}
+#' @param quote see \code{\link{write.table}}
+#' @param row.names see \code{\link{write.table}}
+#' @return logical
+write_TetraPC <- function(T, filename = "tetramer-PC.csv", 
+   nPC =length(TETRA[['PICK']]),
+   digits = 4, quote = FALSE, row.names = TRUE){
+   
+   ok <- try(write.csv(signif(T[['PC']][['x']][,1:nPC], digits = digits), 
+      file = filename, quote = quote, row.names = row.names) )
+   if (interactive()) cat("wrote", filename, "\n")    
+   invisible(!inherits(ok, 'try-error') )
+}
+
+#' Tabulate the raw input data
+#' @param x a DNAStringSet object
+#' @param params a named vector of window, step and width
+#' @param output the name of the output file
+#' @return a list of three elements
+#' \describe{
+#'    \item{outliers}{a list of two elements of outlier information
+#'       \itemize{
+#'          \item{x a list of data.frames per contig of PC1,PC8 for each window step}
+#'          \item{r a list of lists, one per PC, identifying the windows with extreme values}
+#'       }}
+#'    \item{PC}{the \code{prcomp} class object containing the PCA component info}
+#'    \item{x}{the matrix of normalized tetramer counts, rows of windows, cols of tetramers}
+#' }
+tabulate_rawdata <- function(x, 
+   params = c(window = 1600, step = 200, width = 4)){
+
+   xnames <- names(x)
+   x <- tabulateWindows(x, tWindow = params[['window']],
+      tStep = params[['step']], tWidth = params[['width']])
+   ok <- sapply(x, "[[", "status") == 0
+   if (!any(ok)) tetramer_quit("All contigs too short", status = 1)
+   x <- lapply(x[ok], "[[", "x")
+   x <- lapply(x, reduceTetra)
+   x <- lapply(x, normalizeTetra)
+   x <- bindTetra(x)
+   p <- pcaTetra(x)
+   outliers <- selectOutliers(p)
+   list(outliers = outliers, PC = p, x = x)
+}
+
+
+#' Generic quit function
+#' @param msg character, if not NULL then print the message
+#' @param status quit status, if less than zero then in debug mode
+tetramer_quit <- function(msg=NULL, status = -1, devmode = interactive()){
+   if (!is.null(msg)){
+      cat("tetramer.Rscript:", msg, "\n")
+   }
+   if (status[1] >= 0 && !devmode){
+      quit(save = "no", status = status)
+   }
+}
+
+
+#### Functions above
+#### Script below
+
+# if we want to debug within R we can use the interactive() command as a flag
+if (interactive()) {
+   args <- c("-input", "/Users/Shared/data/scgc/tetra/Four_genomes.fasta",
+      "-outputPC", "/Users/Shared/data/scgc/tetra/Four_genomes-tetramer-PC.csv",
+      "-outputfasta", "/Users/Shared/data/scgc/tetra/Four_genomes-outliers.fasta")
+} else {
+   args <- commandArgs(trailingOnly = TRUE)
+}
+
+ARGS <- arg_parser("tetramer analysis")
+ARGS <- add_argument(ARGS, "-input", help = "input FASTA file",
+   type = "character")
+ARGS <- add_argument(ARGS, "-outputPC", help = "output CSV file, defaults to the input path plus 'tetramer-PC.csv'",
+   type = "character")
+ARGS <- add_argument(ARGS, "-outputfasta", help = "optional output fasta of outlier windows", 
+   default = NA, type = "character")
+ARGS <- add_argument(ARGS, "-window", help = "window width in bases",
+   type = "numeric", default = 1600)
+ARGS <- add_argument(ARGS, "-step", help = "window step increment in bases",
+   type = "numeric", default = 200)
+ARGS <- parse_args(ARGS, argv = args)
+
+if (is.na(ARGS$input)) tetramer_quit("input file is required", status = 1)
+if (!file.exists(ARGS$input)) {
+   tetramer_quit(sprintf("input file not found: %s", ARGS$input), status = 1)
+}
+
+PC_output <- if (!is.na(ARGS$outputPC)) ARGS$outputPC else file.path(dirname(ARGS$input), "tetramer-PC.csv")
+fasta_output <- ARGS$outputfasta
+PARAMS <- c(window = ARGS$window, step = ARGS$step, width = 4)
+
+# read in the data and transform as required
+X <- read_fasta(ARGS$input)
+
+# tabulate and compute the PCs
+T <- tabulate_rawdata(X, params = PARAMS)
+
+# write the outlier FASTA file if requested
+if (!is.na(fasta_output)) write_TetraOutliers(T, X,  filename = fasta_output)
+
+# write the PC values to CSV
+write_TetraPC(T, filename = PC_output)
+
+tetramer_quit(status = 0)

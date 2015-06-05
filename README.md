@@ -17,8 +17,9 @@ python setup.py install
 + [samtools](https://github.com/samtools/samtools)
 + [tRNAscan-SE](http://selab.janelia.org/tRNAscan-SE/)
     + [Fixing](http://happykhan.com/getting-trnascan-to-work-on-linux.html) a common issue when installing
-+ tetramerPCA
-    + its dependencies
++ tetramer
+    + [Biostrings](http://www.bioconductor.org/packages/release/bioc/html/Biostrings.html)
+    + [argparser](https://bitbucket.org/djhshih/argparser)
 + graphsignals
     + its dependencies
 

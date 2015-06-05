@@ -1353,8 +1353,11 @@ summarize <- function(x = SUMMARY, master = MASTERNAMES,
 #' @param x the list of summary tables
 #' @param output the name of the output file
 write_summary <- function(x = summarize(), 
-   output = file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "-summary.csv")) ) {
-   write.csv(x, file = output, row.names = TRUE, quote = FALSE)
+   output = file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "-summary.csv.gz")) ) {
+   
+   ff <- gzfile(output, "w")
+   write.csv(x, file = ff, row.names = TRUE, quote = FALSE)
+   close(ff)
 }
 
 
@@ -1612,8 +1615,9 @@ hypo_blastp <- names(hypo_blastp)[unname(hypo_blastp)]
 
 # save a convenience 'key' to the start-stop locations for the input fasta contigs
 dummy <- data.frame(ID = seq_along(rownames(ssF)), name = rownames(ssF), ssF, stringsAsFactors = FALSE)
-ff <- file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "_contig-key.csv"))
+ff <- gzfile(file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "_contig-key.csv.gz")), "w")
 write.csv(dummy, file = ff, quote = FALSE, row.names = FALSE)
+close(ff)
 
 # read the proteins contig file AS IS
 flog.info("reading proteins FASTA file: %s", basename(PROTEINS_FILE))

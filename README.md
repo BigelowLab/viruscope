@@ -17,10 +17,10 @@ python setup.py install
 + [samtools](https://github.com/samtools/samtools)
 + [tRNAscan-SE](http://selab.janelia.org/tRNAscan-SE/)
     + [Fixing](http://happykhan.com/getting-trnascan-to-work-on-linux.html) a common issue when installing
-+ tetramer
++ tetramer (R packages)
     + [Biostrings](http://www.bioconductor.org/packages/release/bioc/html/Biostrings.html)
     + [argparser](https://bitbucket.org/djhshih/argparser)
-+ graphsignals
++ graphsignals (R packages)
     + [futile.logger](https://github.com/zatonovo/futile.logger)
     + [data.table](https://github.com/Rdatatable/data.table)
 

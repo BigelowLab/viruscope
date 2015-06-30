@@ -19,7 +19,7 @@ python setup.py install
     + [Fixing](http://happykhan.com/getting-trnascan-to-work-on-linux.html) a common issue when installing
 + tetramer (R packages)
     + [Biostrings](http://www.bioconductor.org/packages/release/bioc/html/Biostrings.html)
-    + [argparser](https://bitbucket.org/djhshih/argparser)
+    + [argparser](https://bitbucket.org/djhshih/argparser) be sure you have the version from this site
 + graphsignals (R packages)
     + [futile.logger](https://github.com/zatonovo/futile.logger)
     + [data.table](https://github.com/Rdatatable/data.table)

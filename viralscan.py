@@ -447,43 +447,29 @@ def read_count(fasta):
     return total
 
 
-def tetramer_pca(fasta, out_dir, script_path,
+def tetramer_pca(fasta, out_file, script_path,
                  window_size=1600,
                  step_size=200,
-                 threads=1,
                  verbose=False):
-    # this is specific to this particular script
-    name = os.path.basename(fasta).partition('.')[0]
-
-    out_files = [os.path.join(out_dir, name + "-%d-%d-PC.pdf" %
-                              (window_size, step_size)),
-                 os.path.join(out_dir, name + "-outliers.fasta"),
-                 os.path.join(out_dir, name + "-outliers.xml"),
-                 os.path.join(out_dir, name + "-tetramer-counts.csv"),
-                 os.path.join(out_dir, name + "-tetramer-fail.csv"),
-                 os.path.join(out_dir, name + "-tetramer-loading.csv"),
-                 os.path.join(out_dir, name + "-tetramer-PC.csv")]
-
-    if file_exists(out_files):
-        return out_files[-1]
+    if file_exists(out_file):
+        return out_file
 
     if verbose:
         print("Running Tetramer PCA on", os.path.basename(fasta),
               file=sys.stderr)
 
-    with file_transaction(out_files) as tx_out_files:
+    with file_transaction(out_file) as tx_out_file:
         cmd = ("Rscript --vanilla {script} --input {fasta} "
-               "--output_dir {out} --num_threads {n} "
-               "--window {window} --step {step}").format(script=script_path,
-                                                         fasta=fasta,
-                                                         out=out_dir,
-                                                         n=threads,
-                                                         window=window_size,
-                                                         step=step_size)
-        # so we debug this more easily
-        print("$> ", cmd, file=sys.stderr)
+               "--outputPC {out} --window {window} "
+               "--step {step}").format(script=script_path,
+                                       fasta=fasta,
+                                       out=tx_out_file,
+                                       window=window_size,
+                                       step=step_size)
+        if verbose:
+            print("$> ", cmd, file=sys.stderr)
         subprocess.check_call(cmd, shell=True)
-    return out_files[-1]
+    return out_file
 
 
 def write_signals_conf(cfg_file, output, name, input_fasta, gc_output,
@@ -657,9 +643,10 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
                                         blast=diamond_tsv)
     # tetramerPCA
     if script_path:
-        pca_output = tetramer_pca(fasta, os.path.join(output, "tetramerPCA"),
-                                  script_path, window_size, step_size, threads,
-                                  verbose)
+        pca_output = tetramer_pca(fasta,
+                                  os.path.join(output, "tetramerPCA",
+                                               name + "-tetramer-PC.csv"),
+                                  script_path, window_size, step_size, verbose)
     else:
         pca_output = os.path.join(output, "tetramerPCA",
                                   "YOUR_SAMPLE-tetramer-PC.csv")

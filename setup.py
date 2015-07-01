@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='viralscan',
-    version='0.1.5',
+    version='0.1.6',
     url='https://github.com/BigelowLab/viralscan',
     license='',
     author='Joe Brown',

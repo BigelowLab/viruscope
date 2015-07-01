@@ -15,7 +15,7 @@ import sys
 import tempfile
 from distutils.spawn import find_executable
 
-__version__ = "0.1.3"
+__version__ = "0.1.6"
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]
 
@@ -458,12 +458,13 @@ def tetramer_pca(fasta, out_file, script_path,
         print("Running Tetramer PCA on", os.path.basename(fasta),
               file=sys.stderr)
 
+    # using this to create the directory structure only
     with file_transaction(out_file) as tx_out_file:
         cmd = ("Rscript --vanilla {script} --input {fasta} "
                "--outputPC {out} --window {window} "
                "--step {step}").format(script=script_path,
                                        fasta=fasta,
-                                       out=tx_out_file,
+                                       out=out_file,
                                        window=window_size,
                                        step=step_size)
         if verbose:
@@ -619,8 +620,9 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
                         os.path.join(output, name + "_blastp.tsv.gz"), db,
                         num_alignments, evalue, threads, verbose)
     # create database
-    protein_db = make_diamond_db(p_proteins, os.path.join(
-        output, "diamond", os.path.basename(p_proteins).partition(".")[0]),
+    protein_db = make_diamond_db(p_proteins,
+                                 os.path.join(output, "diamond",
+                                              os.path.basename(p_proteins).partition(".")[0]),
                                  threads, verbose)
     # diamond
     query_results = {}

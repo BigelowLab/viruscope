@@ -480,6 +480,8 @@ def tetramer_pca(fasta, out_dir, script_path,
                                                          n=threads,
                                                          window=window_size,
                                                          step=step_size)
+        # so we debug this more easily
+        print("$> ", cmd, file=sys.stderr)
         subprocess.check_call(cmd, shell=True)
     return out_files[-1]
 

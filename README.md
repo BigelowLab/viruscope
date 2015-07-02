@@ -26,24 +26,53 @@ python setup.py install
 
 # Usage
 ```
-$ viralscan -n AAA015-L03 -t 40 --verbose AAA015-L03_2kb_pass_contigs.fasta /dev/shm/vscan_test /mnt/scgc_nfs/ref/viral_dbs/*.fasta.gz
-Running Prodigal on AAA015-L03_2kb_pass_contigs.fasta
-Running tRNAscan on AAA015-L03_2kb_pass_contigs.fasta
-Calculating GC content of AAA015-L03_2kb_pass_contigs.fasta
-Running blastp on /dev/shm/vscan_test/prodigal/AAA015-L03_proteins.fasta using:
-    -db nr
-    -num_alignments 10
-    -evalue 0.001000
-    -num_threads 40
-Creating DIAMOND database for /dev/shm/vscan_test/prodigal/AAA015-L03_proteins.fasta
-Running DIAMOND BLASTX on GoM_DeepSeaSediment_023.fna.gz across AAA015-L03_proteins
-Converting DIAMOND database GoM_DeepSeaSediment_023.daa to tabular (GoM_DeepSeaSediment_023.tsv.gz)
-Finding coverages per contig based coverage on hits above 50 percent in GoM_DeepSeaSediment_023
-Running DIAMOND BLASTX on GoM_DeepSeaSediment_278.fna.gz across AAA015-L03_proteins
-Converting DIAMOND database GoM_DeepSeaSediment_278.daa to tabular (GoM_DeepSeaSediment_278.tsv.gz)
-Finding coverages per contig based coverage on hits above 50 percent in GoM_DeepSeaSediment_278
-Running DIAMOND BLASTX on GoM_DeepSeaSediment_315.fna.gz across AAA015-L03_proteins
-Converting DIAMOND database GoM_DeepSeaSediment_315.daa to tabular (GoM_DeepSeaSediment_315.tsv.gz)
-Finding coverages per contig based coverage on hits above 50 percent in GoM_DeepSeaSediment_315
-Running Tetramer PCA on AAA015-L03_2kb_pass_contigs.fasta
+$ viralscan -h
+usage: viralscan.py [-h] [-v] [-n NAME] [-t THREADS] [-i IDENTITY] [--verbose]
+                    [--db DB] [--num-alignments NUM_ALIGNMENTS]
+                    [--evalue EVALUE] [--script-path SCRIPT_PATH]
+                    [--window-size WINDOW_SIZE] [--step-size STEP_SIZE]
+                    fasta output query [query ...]
+
+To be determined.
+
+positional arguments:
+  fasta                 Fasta file of sequences to analyze.
+  output                Location to write output files.
+  query                 Reference fasta(s). Specify as many as you would like
+                        or use a file pattern.
+
+optional arguments:
+  -h, --help            show this help message and exit
+  -v, --version         show program's version number and exit
+  -n NAME, --name NAME  Name of sample being processed. (default: None)
+  -t THREADS, --threads THREADS
+                        Number of threads to use. (default: 12)
+  -i IDENTITY, --identity IDENTITY
+                        passing blastx percent identity per hit (default: 50)
+  --verbose
+
+BLAST options:
+  --db DB               BLAST database (default: nr)
+  --num-alignments NUM_ALIGNMENTS
+                        Number of database sequences to show alignments for.
+                        (default: 10)
+  --evalue EVALUE       Expectation value threshold for saving hits. (default:
+                        0.001)
+
+TetramerPCA options:
+  --script-path SCRIPT_PATH
+                        tetramer PCA R script path; testing ignore if this
+                        option is skipped (default: None)
+  --window-size WINDOW_SIZE
+  --step-size STEP_SIZE
+```
+
+Example:
+```
+$ viralscan -n AAA015-L03 \
+    -t 40 \
+    --verbose \
+    AAA015-L03.fasta \
+    AAA015-L03_output \
+    /mnt/scgc_nfs/ref/viral_dbs/*.fasta.gz
 ```

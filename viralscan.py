@@ -480,9 +480,8 @@ def write_signals_conf(cfg_file, output, name, input_fasta, gc_output,
     if verbose:
         print("Building viral signals plot configuration file", cfg_file,
               file=sys.stderr)
-    # red, blue, green, purple, orange, lightblue, lightred, lightgreen, lightpurple, lightorange
     pallette = ["#e41a1c", "#377eb8", "#4daf4a", "#984ea3", "#ff7f00",
-                "#a6cee3", "#fb9a99", "#b2df8a", "#cab2d6", "#fdbf6f"]
+                "#ffff33", "#a65628", "#f781bf", "#999999"]
     num_cols = len(pallette)
     names = sorted(query_results.keys())
     # blast tabular output
@@ -562,20 +561,20 @@ trna_file={trna_output}
 tetramer_file={pca_output}
 [genes]
 name=genes
-tRNA=blue
+tRNA=#377eb8
 hypothetical=black
-viral=red
-viral2=darkred
+viral=#e41a1c
+viral2=#e41a1c
 [Coverage]
 log=false
 color=black
 [GC]
-percent=blue
-skew=red
+percent=#377eb8
+skew=#e41a1c
 log=false
 [Tetramer PC]
-PC2=blue
-PC1=red
+PC2=#377eb8
+PC1=#e41a1c
 log=false
 {comparisons}
 {pileups}

@@ -15,7 +15,7 @@ import sys
 import tempfile
 from distutils.spawn import find_executable
 
-__version__ = "0.1.6"
+__version__ = "0.1.7"
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]
 

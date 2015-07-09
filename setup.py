@@ -3,7 +3,7 @@ from setuptools import setup
 
 setup(
     name='viralscan',
-    version='0.1.6',
+    version='0.1.7',
     url='https://github.com/BigelowLab/viralscan',
     license='',
     author='Joe Brown',
@@ -14,6 +14,6 @@ setup(
     install_requires=[],
     entry_points='''
         [console_scripts]
-        viralscan=viralscan:main
+        viral-scan=viralscan:main
     '''
 )

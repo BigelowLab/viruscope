@@ -26,8 +26,8 @@ python setup.py install
 
 # Usage
 ```
-$ viralscan -h
-usage: viralscan.py [-h] [-v] [-n NAME] [-t THREADS] [-i IDENTITY] [--verbose]
+$ viral-scan -h
+usage: viral-scan.py [-h] [-v] [-n NAME] [-t THREADS] [-i IDENTITY] [--verbose]
                     [--db DB] [--num-alignments NUM_ALIGNMENTS]
                     [--evalue EVALUE] [--script-path SCRIPT_PATH]
                     [--window-size WINDOW_SIZE] [--step-size STEP_SIZE]
@@ -69,7 +69,7 @@ TetramerPCA options:
 
 Example:
 ```
-$ viralscan -n AAA015-L03 \
+$ viral-scan -n AAA015-L03 \
     -t 40 \
     --verbose \
     AAA015-L03.fasta \

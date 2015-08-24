@@ -678,7 +678,7 @@ get_temp_dir <- function(pattern = ""){
 #' NOTE the file is not actually created, see \code{tempfile}
 #' @param ... futher arguments for \code{tempfile}
 get_temp_filename <- function( path = TMPDIR,...){
-   tempfile(tmpdir = TMPDIR, ...)
+   tempfile(tmpdir = path, ...)
 }
 
 #' Copy a file to /dev/shm
@@ -1501,12 +1501,29 @@ weighted_score <- function(x,
 
 DEVELMODE <- interactive()
 # use these if in devel mode
+config_file <- NULL
 if (DEVELMODE){
    cat("DEVELOPMENT MODE\n")
    config_file <- "/mnt/scgc_nfs/lab/jlabonte/Sievert_SAGs/Output/AD-133-F21signals.cfg"
 } else {
    config_file <- commandArgs(trailingOnly = TRUE)[1]
 }
+
+if (is.null(config_file)){
+   cat("Usage: Rscript graphsignals.Rscript [-h] config_file\n")
+   viralsignals_quit(status = 1)
+}
+
+if (config_file == '-h' || config_file == '--help') {
+   cat("Usage: Rscript graphsignals.Rscript [-h] [config_file]\n")
+   viralsignals_quit(status = 0)
+}
+
+if (!file.exists(config_file)){
+   cat("config_file not found:", config_file[1], "\n")
+   viralsignals_quit(status = 1)
+}   
+   
 
 VIRAL_WEIGHTS="0:-1e6, 2:0.2, 3:0.3, 5:0.5"
 POV_FR_WEIGHTS="0:-1e6, 1:0.01, 3:0.03, 5:0.05"

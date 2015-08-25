@@ -2,8 +2,7 @@
 viral-SCan, a tool specifically developed to identify viral sequences in single amplified genomes. Viral-SCan uses a
 combination of BLAST annotations, genomic anomalies (GC content and tetramer frequencies), and contrasting fragment
 recruitment of viral and bacterial metagenomic reads to identify viral sequences in the generally fragmented single
-cell genomes. Viral-SCan is a two-step program that was written in python for the data processing (viral-scan.py) and R
-(graphsignals.Rscript) to produce the final graphical and tabular output identifying the viral contigs.
+cell genomes.
 """
 
 from __future__ import print_function

@@ -1516,7 +1516,7 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    # if the training_file is not provided we use the on in the code source folder
    # we use viralsignals_quit as the function for R to use finding the soure file
    if (is.null(training_file))
-       training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "VirusLog_noInf.csv")
+       training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "virus-log_noinf.csv")
    X <- try(read.table(file=training_file,sep = ","))
    if (inherits(X, 'try-error'){
       cat("virus_class: problem reading trianing_file")

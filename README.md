@@ -27,6 +27,7 @@ python setup.py install
 + graphsignals (R packages, install as described at each link)
     + [futile.logger](https://github.com/zatonovo/futile.logger)
     + [data.table](https://github.com/Rdatatable/data.table)
+    + [class](https://cran.r-project.org/web/packages/class/index.html)
 
 # Usage
 

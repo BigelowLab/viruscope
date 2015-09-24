@@ -1496,6 +1496,52 @@ weighted_score <- function(x,
    cumweights[ix]                      
 }
 
+
+#' Tag elements with a positive ID flag and a confidence score
+#' 
+#' @param viral_phage_gene_fraction, 
+#' @param similarity_1 numeric, 
+#' @param fr_ratio numeric, fragment recruitment ratio
+#' @training_file character, the name of the training headerless CSV file
+#' @paran k numeric, seel class::knn
+#' @return see class::knn or NULL
+virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
+   training_file = NULL, k = 25) {
+   
+   if(missing(viral_phage_gene_fraction) || missing(similarity_1) || missing(fr_ratio)){
+      cat('virus_class: three inputs required - viral_phage_gene_fraction, similarity_1, fr_ration\n')
+      return(NULL)
+   }
+   
+   # if the training_file is not provided we use the on in the code source folder
+   # we use viralsignals_quit as the function for R to use finding the soure file
+   if (is.null(training_file))
+       training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "VirusLog_noInf.csv")
+   X <- try(read.table(file=training_file,sep = ","))
+   if (inherits(X, 'try-error'){
+      cat("virus_class: problem reading trianing_file")
+      return(NULL)
+   }
+   
+   # I'm a bit confused by this - if they are undefined, then why do we have them
+   # in the file?  
+   ix <- (X[,3] != -9999) & (X[,4] != -9999)
+   Y <- X[ix,]
+   Y_train <- Y[,2:4]
+   Y_test <- c(viral_phage_gene_fraction, log10(similarity_1), log10(fr_ratio))
+   Y_trainlabel <- Y[,5]
+   
+   # since we just have one function from the package that we call, we won't
+   # load the package - instead we'll just dig down into the package
+   # hence class::knn()
+   Y_pred <- class::knn(train = Y_train, test = Y_test, cl = Y_trainlabel, k=k[1], prob=TRUE)
+   return(Y_pred)
+}
+
+
+
+
+
 ##### Functions above
 ##### Script below
 

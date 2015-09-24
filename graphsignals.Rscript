@@ -1497,7 +1497,7 @@ weighted_score <- function(x,
 }
 
 
-#' Tag elements with a positive ID flag and a confidence score
+#' Tag elements with a positive ID flag and a confidence score. See \code{class::knn}
 #' 
 #' @param viral_phage_gene_fraction, 
 #' @param similarity_1 numeric, 
@@ -1513,13 +1513,14 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
       return(NULL)
    }
    
-   # if the training_file is not provided we use the on in the code source folder
+   # if the training_file is not provided we use the one in the code source folder
    # we use viralsignals_quit as the function for R to use finding the soure file
+   # but we could have picked any another one
    if (is.null(training_file))
        training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "virus-log_noinf.csv")
    X <- try(read.table(file=training_file,sep = ","))
    if (inherits(X, 'try-error'){
-      cat("virus_class: problem reading trianing_file")
+      cat("virus_class: problem reading training_file")
       return(NULL)
    }
    
@@ -1528,7 +1529,7 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    ix <- (X[,3] != -9999) & (X[,4] != -9999)
    Y <- X[ix,]
    Y_train <- Y[,2:4]
-   Y_test <- c(viral_phage_gene_fraction, log10(similarity_1), log10(fr_ratio))
+   Y_test <- cbind(viral_phage_gene_fraction, log10(similarity_1), log10(fr_ratio))
    Y_trainlabel <- Y[,5]
    
    # since we just have one function from the package that we call, we won't

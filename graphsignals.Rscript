@@ -1506,7 +1506,7 @@ weighted_score <- function(x,
 #' @paran k numeric, seel class::knn
 #' @return see class::knn or NULL
 virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
-   training_file = NULL, k = 25) {
+   training_file = NULL, k = 3) {
    
    if(missing(viral_phage_gene_fraction) || missing(similarity_1) || missing(fr_ratio)){
       cat('virus_class: three inputs required - viral_phage_gene_fraction, similarity_1, fr_ration\n')

@@ -1535,8 +1535,14 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    # since we just have one function from the package that we call, we won't
    # load the package - instead we'll just dig down into the package
    # hence class::knn()
+   # class names returned (possibly 0/1) with a probability attribute.
    Y_pred <- class::knn(train = Y_train, test = Y_test, cl = Y_trainlabel, k=k[1], prob=TRUE)
-   return(Y_pred)
+   # convert probability to 0-1  0 = not virus, 1= virus
+   p <- attr(Y_pred, "prob")
+   ix <- Y_Pred == 1
+   iy <- p == 0
+   
+   return(prob)
 }
 
 
@@ -1852,6 +1858,13 @@ SUMMARY[['GC']] <- summarize_gccontent(gc)
 
 flog.info("saving summary table")
 x <- summarize()
+
+# insert virus_class add 1 column called virus_prob
+# x <- virus_class(x[,c('viral_phage_gene_fraction','similarity_1','fr_ratio')])
+vprob <- virus_class(x[,c('viral_phage_gene_fraction','similarity_1','fr_ratio')])
+if (is.null(vprob)) vprob <- rep(-1, nrow(x))
+x[,'virus_prob'] <- vprob
+
 the_summary <- write_summary(x)
 
 flog.info("making graphics")

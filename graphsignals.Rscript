@@ -1503,11 +1503,11 @@ weighted_score <- function(x,
 #' @param similarity_1 numeric, 
 #' @param fr_ratio numeric, fragment recruitment ratio
 #' @training_file character, the name of the training headerless CSV file
-#' @paran k numeric, seel class::knn
+#' @param k numeric, see class::knn, with a probabilty score
 #' @return see class::knn or NULL
 virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    training_file = NULL, k = 3) {
-   
+   require(class)
    if(missing(viral_phage_gene_fraction) || missing(similarity_1) || missing(fr_ratio)){
       cat('virus_class: three inputs required - viral_phage_gene_fraction, similarity_1, fr_ration\n')
       return(NULL)
@@ -1536,13 +1536,12 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    # load the package - instead we'll just dig down into the package
    # hence class::knn()
    # class names returned (possibly 0/1) with a probability attribute.
-   Y_pred <- class::knn(train = Y_train, test = Y_test, cl = Y_trainlabel, k=k[1], prob=TRUE)
-   # convert probability to 0-1  0 = not virus, 1= virus
-   p <- attr(Y_pred, "prob")
-   ix <- Y_Pred == 1
-   iy <- p == 0
+   Y_pred <- try(class::knn(train = Y_train, test = Y_test, cl = Y_trainlabel, k=k[1], prob=TRUE))
+   if (inherits(Y_pred, "try-error")){
+      Y_pred <- NULL
+   }
+   invisible(Y_pred)
    
-   return(prob)
 }
 
 
@@ -1862,7 +1861,8 @@ x <- summarize()
 # insert virus_class add 1 column called virus_prob
 # x <- virus_class(x[,c('viral_phage_gene_fraction','similarity_1','fr_ratio')])
 vprob <- virus_class(x[,c('viral_phage_gene_fraction','similarity_1','fr_ratio')])
-if (is.null(vprob)) vprob <- rep(-1, nrow(x))
+if (is.null(vprob)) vclass <- vprob <- rep(-1, nrow(x))
+x[,'virus_class'] <- vclass
 x[,'virus_prob'] <- vprob
 
 the_summary <- write_summary(x)

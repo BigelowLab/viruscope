@@ -1519,7 +1519,7 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    if (is.null(training_file))
        training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "virus-log_noinf.csv")
    X <- try(read.table(file=training_file,sep = ","))
-   if (inherits(X, 'try-error'){
+   if (inherits(X, 'try-error')){
       cat("virus_class: problem reading training_file")
       return(NULL)
    }

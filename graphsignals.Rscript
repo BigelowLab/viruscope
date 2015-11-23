@@ -1641,6 +1641,7 @@ PROTEINS_FILE <- get_file_from_config("proteins_file", relative = relative_path,
 BLASTP_FILE <- get_file_from_config("blastp_file", relative = relative_path, path = INPUT_PATH)
 TRNA_FILE <-  get_file_from_config("trna_file", relative = relative_path, path = INPUT_PATH)
 TETRAMER_FILE <- get_file_from_config("tetramer_file", relative = relative_path, path = INPUT_PATH)
+TRAINING_FILE <- get_config(CFG,"inputs", "training_file", default = '/mnt/scgc_nfs/opt/viralscan/virus-log_noinf.csv')
 
 # get ready to use the ramdisk
 TMPDIR <- get_temp_dir(pattern = SAMPLE_NAME)
@@ -1867,12 +1868,11 @@ SUMMARY[['GC']] <- summarize_gccontent(gc)
 flog.info("saving summary table")
 x <- summarize()
 
-# insert virus_class add 1 column called virus_prob
-training_file <- file.path('/mnt/scgc_nfs/opt/viralscan', "virus-log_noinf.csv")
+# run classification
 cnames <- colnames(x)
 icol <- grepl(glob2rx("Similarity_1.*.fr"), cnames)
 thesecols <- c('viral_phage_gene_fraction',cnames[icol])
-vprob <- virus_class(x[,thesecols],training_file = training_file)
+vprob <- virus_class(x[,thesecols],training_file = TRAINING_FILE)
 if (is.null(vprob)) {   
    x[,'virus_class'] <- x[,'virus_prob'] <- rep(-1, nrow(x))
 } else {

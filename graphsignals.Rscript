@@ -1508,10 +1508,16 @@ weighted_score <- function(x,
 virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    training_file = NULL, k = 3) {
    require(class)
-   if(missing(viral_phage_gene_fraction) || missing(similarity_1) || missing(fr_ratio)){
-      cat('virus_class: three inputs required - viral_phage_gene_fraction, similarity_1, fr_ration\n')
-      return(NULL)
+   
+   if (is.data.frame(viral_phage_gene_fraction) || is.matrix(viral_phage_gene_fraction)){
+      similarity_1 <- viral_phage_gene_fraction[,2]
+      fr_ratio <- viral_phage_gene_fraction[,3]
+      viral_phage_gene_fraction <- viral_phage_gene_fraction[,1]
    }
+   #if(missing(viral_phage_gene_fraction) || missing(similarity_1) || missing(fr_ratio)){
+   #   cat('virus_class: three inputs required - viral_phage_gene_fraction, similarity_1, fr_ration\n')
+   #   return(NULL)
+   #}
    
    # if the training_file is not provided we use the one in the code source folder
    # we use viralsignals_quit as the function for R to use finding the soure file
@@ -1520,7 +1526,7 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
        training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "virus-log_noinf.csv")
    X <- try(read.table(file=training_file,sep = ","))
    if (inherits(X, 'try-error')){
-      cat("virus_class: problem reading training_file")
+      flog.error("virus_class: problem reading training_file %s",training_file )
       return(NULL)
    }
    
@@ -1538,14 +1544,12 @@ virus_class <- function(viral_phage_gene_fraction,similarity_1,fr_ratio,
    # class names returned (possibly 0/1) with a probability attribute.
    Y_pred <- try(class::knn(train = Y_train, test = Y_test, cl = Y_trainlabel, k=k[1], prob=TRUE))
    if (inherits(Y_pred, "try-error")){
+      flog.info("virus_class: class::knn generated error, returning NULL" )
       Y_pred <- NULL
    }
    invisible(Y_pred)
    
 }
-
-
-
 
 
 ##### Functions above

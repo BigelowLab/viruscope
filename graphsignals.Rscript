@@ -1642,7 +1642,7 @@ BLASTP_FILE <- get_file_from_config("blastp_file", relative = relative_path, pat
 TRNA_FILE <-  get_file_from_config("trna_file", relative = relative_path, path = INPUT_PATH)
 TETRAMER_FILE <- get_file_from_config("tetramer_file", relative = relative_path, path = INPUT_PATH)
 TRAINING_FILE <- get_config(CFG,"inputs", "training_file", default = '/mnt/scgc_nfs/opt/viralscan/virus-log_noinf.csv')
-
+KNN_K <- as.numeric(get_config(CFG,"classifier", 'knn_k', default = 3))
 # get ready to use the ramdisk
 TMPDIR <- get_temp_dir(pattern = SAMPLE_NAME)
 
@@ -1872,7 +1872,7 @@ x <- summarize()
 cnames <- colnames(x)
 icol <- grepl(glob2rx("Similarity_1.*.fr"), cnames)
 thesecols <- c('viral_phage_gene_fraction',cnames[icol])
-vprob <- virus_class(x[,thesecols],training_file = TRAINING_FILE)
+vprob <- virus_class(x[,thesecols],training_file = TRAINING_FILE, k = KNN_K)
 if (is.null(vprob)) {   
    x[,'virus_class'] <- x[,'virus_prob'] <- rep(-1, nrow(x))
 } else {

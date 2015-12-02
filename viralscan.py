@@ -478,7 +478,7 @@ def tetramer_pca(fasta, out_file, script_path,
 
 def write_signals_conf(cfg_file, output, name, input_fasta, gc_output,
                        protein_fasta, blastp_tsv, trna_output, pca_output,
-                       query_results,
+                       query_results, training_file, knn_k,
                        verbose=False):
     if verbose:
         print("Building viral signals plot configuration file", cfg_file,
@@ -562,6 +562,9 @@ proteins_file={p_proteins}
 blastp_file={blastp_tsv}
 trna_file={trna_output}
 tetramer_file={pca_output}
+[classifier]
+training_file={training_file}
+knn_k={knn_k}
 [genes]
 name=genes
 tRNA=#377eb8
@@ -589,6 +592,8 @@ log=false
            blastp_tsv=blastp_tsv,
            trna_output=trna_output,
            pca_output=pca_output,
+           training_file=training_file,
+           knn_k=knn_k,
            comparisons="\n".join(comps),
            pileups="\n".join(pileups))
     with open(cfg_file, 'w') as ofh:
@@ -597,7 +602,8 @@ log=false
 
 
 def viralscan(fasta, output, query, name, threads, identity, verbose, db,
-              num_alignments, evalue, script_path, window_size, step_size):
+              num_alignments, evalue, script_path, window_size, step_size,
+              training_file, knn_k):
     check_dependencies(REQUIRES)
     if name is None:
         name = name_from_path(fasta)
@@ -658,7 +664,8 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
     signals_cfg = write_signals_conf(os.path.join(output, "signals.cfg"),
                                      output, name, fasta, gc_output,
                                      p_proteins, blastp_tsv, trna_output,
-                                     pca_output, query_results)
+                                     pca_output, query_results,
+                                     training_file, knn_k)
 
 
 def main():
@@ -716,6 +723,17 @@ def main():
                                  "ignore if this option is skipped"))
     tetramero.add_argument('--window-size', default=1600, type=int)
     tetramero.add_argument('--step-size', default=200, type=int)
+    
+    classifiero = p.add_argument_group('Classifier options')
+    classifiero.add.argument('--training-file',
+                             required=True,
+                             type=lambda x: _file_exists(p, x),
+                             default='virus-log_noinf.csv',
+                             help="classifier training file")
+    classifiero.addargument("--knn_k",
+                            type=int,
+                            default=3,
+                            help="nearest neighbors for classifier")
 
     args = vars(p.parse_args())
     viralscan(**args)

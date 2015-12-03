@@ -723,14 +723,14 @@ def main():
                                  "ignore if this option is skipped"))
     tetramero.add_argument('--window-size', default=1600, type=int)
     tetramero.add_argument('--step-size', default=200, type=int)
-    
+
     classifiero = p.add_argument_group('Classifier options')
     classifiero.add.argument('--training-file',
                              required=True,
                              type=lambda x: _file_exists(p, x),
                              default='virus-log_noinf.csv',
                              help="classifier training file")
-    classifiero.addargument("--knn_k",
+    classifiero.addargument("--knn-k",
                             type=int,
                             default=3,
                             help="nearest neighbors for classifier")

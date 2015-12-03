@@ -478,8 +478,7 @@ def tetramer_pca(fasta, out_file, script_path,
 
 def write_signals_conf(cfg_file, output, name, input_fasta, gc_output,
                        protein_fasta, blastp_tsv, trna_output, pca_output,
-                       query_results, training_file, knn_k,
-                       verbose=False):
+                       query_results, training_file, knn_k, verbose=False):
     if verbose:
         print("Building viral signals plot configuration file", cfg_file,
               file=sys.stderr)
@@ -592,7 +591,7 @@ log=false
            blastp_tsv=blastp_tsv,
            trna_output=trna_output,
            pca_output=pca_output,
-           training_file=training_file,
+           training_file=training_file or os.path.join(output, "YOUR_TRAINING_FILE.csv"),
            knn_k=knn_k,
            comparisons="\n".join(comps),
            pileups="\n".join(pileups))
@@ -725,10 +724,11 @@ def main():
     tetramero.add_argument('--step-size', default=200, type=int)
 
     classifiero = p.add_argument_group('Classifier options')
+    # having these options here implies viralscan runs the classifier
+    # rather than simply filling the config file
+    # TODO: write config file separately or include classifier as part of viral-scan
     classifiero.add.argument('--training-file',
-                             required=True,
                              type=lambda x: _file_exists(p, x),
-                             default='virus-log_noinf.csv',
                              help="classifier training file")
     classifiero.addargument("--knn-k",
                             type=int,

@@ -149,7 +149,8 @@ read_fasta <- function(filename, clean = TRUE){
       tetramer_quit(sprintf("Biostrings::readBStringSet error reading file: %s",
          filename[1]), status = 1)
    }
-      
+   # this seems awkward but it works
+   x <- BStringSet(toupper(as.character(x)))   
       
    if (clean) {
       x <- clean_sequence(x)

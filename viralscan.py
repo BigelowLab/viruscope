@@ -727,10 +727,10 @@ def main():
     # having these options here implies viralscan runs the classifier
     # rather than simply filling the config file
     # TODO: write config file separately or include classifier as part of viral-scan
-    classifiero.add.argument('--training-file',
+    classifiero.add_argument('--training-file',
                              type=lambda x: _file_exists(p, x),
                              help="classifier training file")
-    classifiero.addargument("--knn-k",
+    classifiero.add_argument("--knn-k",
                             type=int,
                             default=3,
                             help="nearest neighbors for classifier")

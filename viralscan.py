@@ -16,6 +16,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import time
 from distutils.spawn import find_executable
 
 __version__ = "0.1.8"

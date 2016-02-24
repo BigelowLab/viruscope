@@ -1500,50 +1500,49 @@ weighted_score <- function(x,
 #' Tag elements with a positive ID flag and a confidence score. See \code{class::knn}
 #' 
 #' @param x viral_phage_gene_fraction, 
-#' @param y similarity_1 numeric, 
-#' @param z fr_ratio numeric, fragment recruitment ratio
+#' @param y ratio_virus_bacteria numeric which is Similarity_1.POV.fr / Similarity_1.LineP.all.fr 
 #' @training_file character, the name of the training headerless CSV file
 #' @param k numeric, see class::knn, with a probabilty score
 #' @return a 2 column data.frame of 'class' and 'prob'
-virus_class <- function(x,y,z,
-   training_file = NULL, k = 3) {
-   require(class)
+virus_class <- function(x,y,
+   training_file = NULL, k = 27) {
    
-   if (is.data.frame(x) || is.matrix(x)){
-      y <- x[,2]
-      z <- x[,3]
-      x <- x[,1]
+   if(!require(class)){
+      cat("R package 'class' must be installed to run viral_class()\n")
+      return(NULL)
    }
-
+   
    # check for any NAs (shoudl check if ALL is NA, but...)
-   Y_test <- cbind(x,log10(y),log10(z))
-   hasna <- apply(Y_test, 1, function(x) any(is.na(x))) 
-   Y_test <- Y_test[!hasna,]
+   TEST <- cbind(log10(0.0001 + x), log10(y))
+   hasna <- apply(TEST, 1, function(x) any(is.na(x))) 
+   TEST <- TEST[!hasna,]
    
    # if the training_file is not provided we use the one in the code source folder
    # we use viralsignals_quit as the function for R to use finding the soure file
    # but we could have picked any another one
    if (is.null(training_file))
-       training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "virus-log_noinf.csv")
-   X <- try(read.table(file=training_file,sep = ","))
-   if (inherits(X, 'try-error')){
+       training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "virus-training.csv")
+   TRAIN <- try(read.table(file=training_file,sep = ","))
+   if (inherits(Y_train, 'try-error')){
       flog.error("virus_class: problem reading training_file %s",training_file )
       return(NULL)
    }
    
-   # I'm a bit confused by this - if they are undefined, then why do we have them
-   # in the file?  
-   ix <- (X[,3] != -9999) & (X[,4] != -9999)
-   Y <- X[ix,]
-   Y_train <- Y[,2:4]
-   #Y_test <- cbind(viral_phage_gene_fraction, log10(similarity_1), log10(fr_ratio))
-   Y_trainlabel <- Y[,5]
+   # the original spreadsheet says this
+   # virus = 1
+   # non-virus = 0
+   # uncertain = 0.5
+   # but Nick said this
+   # virus <- TRAIN[,'score'] != 0.5
+   # I thinm it should probably be this
+   TRAIN_label <- TRAIN[,'score'] > 0.5
+   TRAIN <- TRAIN[,1:2]
    
    # since we just have one function from the package that we call, we won't
    # load the package - instead we'll just dig down into the package
    # hence class::knn()
    # class names returned (possibly 0/1) with a probability attribute.
-   Y_pred <- try(class::knn(train = Y_train, test = Y_test, cl = Y_trainlabel, k=k[1], prob=TRUE))
+   Y_pred <- try(class::knn(train = TRAIN, test = TEST, cl = TRAIN_label, k=k[1], prob=TRUE))
    if (inherits(Y_pred, "try-error")){
       flog.info("virus_class: class::knn generated error, returning NULL" )
       Y_pred <- NULL
@@ -1641,7 +1640,7 @@ PROTEINS_FILE <- get_file_from_config("proteins_file", relative = relative_path,
 BLASTP_FILE <- get_file_from_config("blastp_file", relative = relative_path, path = INPUT_PATH)
 TRNA_FILE <-  get_file_from_config("trna_file", relative = relative_path, path = INPUT_PATH)
 TETRAMER_FILE <- get_file_from_config("tetramer_file", relative = relative_path, path = INPUT_PATH)
-TRAINING_FILE <- get_config(CFG,"inputs", "training_file", default = '/mnt/scgc_nfs/opt/viralscan/virus-log_noinf.csv')
+TRAINING_FILE <- get_config(CFG,"inputs", "training_file", default = '/mnt/scgc_nfs/opt/viralscan/virus-training.csv')
 KNN_K <- as.numeric(get_config(CFG,"classifier", 'knn_k', default = 3))
 # get ready to use the ramdisk
 TMPDIR <- get_temp_dir(pattern = SAMPLE_NAME)
@@ -1869,17 +1868,18 @@ flog.info("saving summary table")
 x <- summarize()
 
 # run classification
-cnames <- colnames(x)
-icol <- grepl(glob2rx("Similarity_1.*.fr"), cnames)
-thesecols <- c('viral_phage_gene_fraction',cnames[icol])
-vprob <- virus_class(x[,thesecols],training_file = TRAINING_FILE, k = KNN_K)
-if (is.null(vprob)) {   
-   x[,'virus_class'] <- x[,'virus_prob'] <- rep(-1, nrow(x))
-} else {
-   x[,'virus_class'] <- vprob[,'class']
-   x[,'virus_prob'] <- vprob[,'prob']
+# insert new 'ratio_virus_bacteria' <- Similarity_1.POV.fr / Similarity_1.LineP.all.fr
+if (all(c('Similarity_1.POV.fr', 'Similarity_1.LineP.all.fr', 'viral_phage_gene_fraction') %in% colnames(x))){
+   x[,'ratio_virus_bacteria'] <-  x[,'Similarity_1.POV.fr'] / x[,'Similarity_1.LineP.all.fr']
+   vprob <- virus_class(x[,'viral_phage_gene_fraction'],x[,'ratio_virus_bacteria'],
+      training_file = TRAINING_FILE, k = KNN_K)
+   if (is.null(vprob)) {   
+      x[,'virus_class'] <- x[,'virus_prob'] <- rep(-1, nrow(x))
+   } else {
+      x[,'virus_class'] <- vprob[,'class']
+      x[,'virus_prob'] <- vprob[,'prob']
+   }
 }
-
 
 the_summary <- write_summary(x)
 

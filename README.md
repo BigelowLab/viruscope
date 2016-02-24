@@ -76,7 +76,7 @@ Classifier options:
   --training_file TRAINING_FILE
                         the fully qualified path to the classifier training file
   --knn-k KNN_K         the number of nearest neighbors used by the classifier 
-                        (default: 3)
+                        (default: 27)
 ```
 
 Example:

@@ -733,7 +733,7 @@ def main():
                              help="classifier training file")
     classifiero.add_argument("--knn-k",
                             type=int,
-                            default=3,
+                            default=27,
                             help="nearest neighbors for classifier")
 
     args = vars(p.parse_args())

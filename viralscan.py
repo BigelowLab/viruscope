@@ -619,6 +619,9 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
     trna_output = trnascan(fasta, os.path.join(output, "tRNAscan",
                                                name + "-tRNAscan.txt"),
                            verbose)
+
+    # check here to verify trna converted something.
+
     # gc content and skew
     gc_output = gc_content(fasta,
                            os.path.join(output, name + "_gc_content.tsv.gz"),

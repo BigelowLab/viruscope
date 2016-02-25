@@ -19,7 +19,7 @@ import tempfile
 import time
 from distutils.spawn import find_executable
 
-__version__ = "0.1.8"
+__version__ = "0.1.9"
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]
 
@@ -223,7 +223,7 @@ def gc_skew_and_content(seq, window_size=500):
         yield mid, skew, content
 
 
-def gc_content(fasta, out_file, verbose=False):
+def gc_content(fasta, out_file, window_size=500, verbose=False):
     if file_exists(out_file):
         return out_file
 
@@ -236,7 +236,12 @@ def gc_content(fasta, out_file, verbose=False):
                   'w') as wfh, open(fasta) as rfh:
             print(*header, sep="\t", file=wfh)
             for name, seq in readfa(rfh):
-                for point, skew, content in gc_skew_and_content(seq, 500):
+                if len(seq) < window_size:
+                    print(("Omitting record [%s] -- you may experience issues "
+                           "downstream when including FASTA entries shorter "
+                           "than %d nt") % (name, window_size))
+                    continue
+                for point, skew, content in gc_skew_and_content(seq, window_size):
                     print("%s\t%i\t%0.3f\t%0.3f" %
                           (name, point, skew, content),
                           file=wfh)
@@ -688,19 +693,19 @@ def main():
         version=__version__)
     p.add_argument('fasta',
                    type=lambda x: _file_exists(p, x),
-                   help="Fasta file of sequences to analyze.")
-    p.add_argument('output', help="Location to write output files.")
+                   help="FASTA file of sequences to analyze.")
+    p.add_argument('output', help="location to write output files")
     p.add_argument('query',
                    type=lambda x: _file_exists(p, x),
                    nargs="+",
-                   help=("Reference fasta(s). Specify as many as "
-                         "you would like or use a file pattern."))
+                   help=("reference FASTA(s) -- specify as many as "
+                         "you would like or use a file pattern"))
 
-    p.add_argument('-n', '--name', help="Name of sample being processed.")
+    p.add_argument('-n', '--name', help="name of sample being processed")
     p.add_argument('-t', '--threads',
                    default=12,
                    type=int,
-                   help="Number of threads to use.")
+                   help="number of threads to use.")
     p.add_argument('-i', '--identity',
                    default=50,
                    type=float,
@@ -712,20 +717,22 @@ def main():
     blasto.add_argument('--num-alignments',
                         type=int,
                         default=10,
-                        help=("Number of database sequences to "
-                              "show alignments for."))
+                        help=("number of database sequences for which to "
+                              "show alignments"))
     blasto.add_argument('--evalue',
                         type=float,
                         default=0.001,
-                        help="Expectation value threshold for saving hits.")
+                        help="expectation value threshold for saving hits")
 
     tetramero = p.add_argument_group('TetramerPCA options')
     tetramero.add_argument('--script-path',
                            type=lambda x: _file_exists(p, x),
                            help=("tetramer PCA R script path; testing "
-                                 "ignore if this option is skipped"))
-    tetramero.add_argument('--window-size', default=1600, type=int)
-    tetramero.add_argument('--step-size', default=200, type=int)
+                                 "ignored if this option is skipped"))
+    tetramero.add_argument('--window-size', default=1600, type=int,
+                           help="sequence window size")
+    tetramero.add_argument('--step-size', default=200, type=int,
+                           help="step size for window")
 
     classifiero = p.add_argument_group('Classifier options')
     # having these options here implies viralscan runs the classifier

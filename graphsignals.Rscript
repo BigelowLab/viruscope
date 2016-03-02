@@ -1528,13 +1528,8 @@ virus_class <- function(x,y,
       return(NULL)
    }
    
-   # the original spreadsheet says this
-   # virus = 1
-   # non-virus = 0
-   # uncertain = 0.5
-   # but Nick said this
-   # virus <- TRAIN[,'score'] != 0.5
-   # I thinm it should probably be this
+   # >0.5 is a virus
+   # <= 0.5 is non-virus
    TRAIN_label <- TRAIN[,'score'] > 0.5
    TRAIN <- TRAIN[,1:2]
    

@@ -35,24 +35,31 @@ python setup.py install
 
 ```
 $ viral-scan -h
-usage: viral-scan.py [-h] [-v] [-n NAME] [-t THREADS] [-i IDENTITY] [--verbose]
+usage: viral-scan [-h] [-v] [-n NAME] [-t THREADS] [-i IDENTITY] [--verbose]
                     [--db DB] [--num-alignments NUM_ALIGNMENTS]
                     [--evalue EVALUE] [--script-path SCRIPT_PATH]
                     [--window-size WINDOW_SIZE] [--step-size STEP_SIZE]
+                    [--training-file TRAINING_FILE] [--knn-k KNN_K]
                     fasta output query [query ...]
 
+viral-SCan, a tool specifically developed to identify viral sequences in
+single amplified genomes. Viral-SCan uses a combination of BLAST annotations,
+genomic anomalies (GC content and tetramer frequencies), and contrasting
+fragment recruitment of viral and bacterial metagenomic reads to identify
+viral sequences in the generally fragmented single cell genomes.
+
 positional arguments:
-  fasta                 Fasta file of sequences to analyze.
-  output                Location to write output files.
-  query                 Reference fasta(s). Specify as many as you would like
-                        or use a file pattern.
+  fasta                 FASTA file of sequences to analyze.
+  output                location to write output files
+  query                 reference FASTA(s) -- specify as many as you would
+                        like or use a file pattern
 
 optional arguments:
   -h, --help            show this help message and exit
   -v, --version         show program's version number and exit
-  -n NAME, --name NAME  Name of sample being processed. (default: None)
+  -n NAME, --name NAME  name of sample being processed (default: None)
   -t THREADS, --threads THREADS
-                        Number of threads to use. (default: 12)
+                        number of threads to use. (default: 12)
   -i IDENTITY, --identity IDENTITY
                         passing blastx percent identity per hit (default: 50)
   --verbose
@@ -60,23 +67,24 @@ optional arguments:
 BLAST options:
   --db DB               BLAST database (default: nr)
   --num-alignments NUM_ALIGNMENTS
-                        Number of database sequences to show alignments for.
-                        (default: 10)
-  --evalue EVALUE       Expectation value threshold for saving hits. (default:
+                        number of database sequences for which to show
+                        alignments (default: 10)
+  --evalue EVALUE       expectation value threshold for saving hits (default:
                         0.001)
 
 TetramerPCA options:
   --script-path SCRIPT_PATH
-                        tetramer PCA R script path; testing ignore if this
+                        tetramer PCA R script path; testing ignored if this
                         option is skipped (default: None)
   --window-size WINDOW_SIZE
+                        sequence window size (default: 1600)
   --step-size STEP_SIZE
-  
+                        step size for window (default: 200)
+
 Classifier options:
-  --training_file TRAINING_FILE
-                        the fully qualified path to the classifier training file
-  --knn-k KNN_K         the number of nearest neighbors used by the classifier 
-                        (default: 27)
+  --training-file TRAINING_FILE
+                        classifier training file (default: None)
+  --knn-k KNN_K         nearest neighbors for classifier (default: 27)
 ```
 
 Example:

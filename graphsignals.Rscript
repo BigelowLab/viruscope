@@ -1635,7 +1635,7 @@ PROTEINS_FILE <- get_file_from_config("proteins_file", relative = relative_path,
 BLASTP_FILE <- get_file_from_config("blastp_file", relative = relative_path, path = INPUT_PATH)
 TRNA_FILE <-  get_file_from_config("trna_file", relative = relative_path, path = INPUT_PATH)
 TETRAMER_FILE <- get_file_from_config("tetramer_file", relative = relative_path, path = INPUT_PATH)
-TRAINING_FILE <- get_config(CFG,"inputs", "training_file", default = '/mnt/scgc_nfs/opt/viralscan/virus-training.csv')
+TRAINING_FILE <- get_config(CFG,"classifier", "training_file", default = '/mnt/scgc_nfs/opt/viralscan/virus-training.csv')
 KNN_K <- as.numeric(get_config(CFG,"classifier", 'knn_k', default = 3))
 # get ready to use the ramdisk
 TMPDIR <- get_temp_dir(pattern = SAMPLE_NAME)
@@ -1865,14 +1865,18 @@ x <- summarize()
 # run classification
 # insert new 'ratio_virus_bacteria' <- Similarity_1.POV.fr / Similarity_1.LineP.all.fr
 if (all(c('Similarity_1.POV.fr', 'Similarity_1.LineP.all.fr', 'viral_phage_gene_fraction') %in% colnames(x))){
-   x[,'ratio_virus_bacteria'] <-  x[,'Similarity_1.POV.fr'] / x[,'Similarity_1.LineP.all.fr']
-   vprob <- virus_class(x[,'viral_phage_gene_fraction'],x[,'ratio_virus_bacteria'],
-      training_file = TRAINING_FILE, k = KNN_K)
-   if (is.null(vprob)) {   
-      x[,'virus_class'] <- x[,'virus_prob'] <- rep(-1, nrow(x))
+   if (!file.exists(TRAINING_FILE[1])){
+      flog.warning("classifier training file not found: %s", TRAINING_FILE[1])
    } else {
-      x[,'virus_class'] <- vprob[,'class']
-      x[,'virus_prob'] <- vprob[,'prob']
+      x[,'ratio_virus_bacteria'] <-  x[,'Similarity_1.POV.fr'] / x[,'Similarity_1.LineP.all.fr']
+      vprob <- virus_class(x[,'viral_phage_gene_fraction'],x[,'ratio_virus_bacteria'],
+         training_file = TRAINING_FILE[1], k = KNN_K)
+      if (is.null(vprob)) {   
+         x[,'virus_class'] <- x[,'virus_prob'] <- rep(-1, nrow(x))
+      } else {
+         x[,'virus_class'] <- vprob[,'class']
+         x[,'virus_prob'] <- vprob[,'prob']
+      }
    }
 }
 

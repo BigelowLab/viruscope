@@ -1522,7 +1522,7 @@ virus_class <- function(x,y,
    # but we could have picked any another one
    if (is.null(training_file))
        training_file <- file.path(getSrcDirectory(viralsignals_quit)[1], "virus-training.csv")
-   TRAIN <- try(read.table(file=training_file,sep = ","))
+   TRAIN <- try(read.table(file=training_file,sep = ",", header = TRUE))
    if (inherits(TRAIN, 'try-error')){
       flog.error("virus_class: problem reading training_file %s",training_file )
       return(NULL)

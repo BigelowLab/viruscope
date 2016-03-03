@@ -1528,6 +1528,9 @@ virus_class <- function(x,y,
       return(NULL)
    }
    
+   TRAIN <- na.omit(TRAIN)
+   
+   
    # >0.5 is a virus
    # <= 0.5 is non-virus
    TRAIN_label <- TRAIN[,'score'] > 0.5

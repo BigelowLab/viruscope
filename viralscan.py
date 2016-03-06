@@ -19,7 +19,9 @@ import tempfile
 import time
 from distutils.spawn import find_executable
 
-__version__ = "0.1.9"
+
+__version_info__ = (0, 2, 0)
+__version__ = '.'.join(map(str, __version_info__))
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]
 
@@ -121,9 +123,14 @@ def file_exists(fnames):
 
 
 def check_dependencies(executables):
+    exes = []
     for exe in executables:
         if not find_executable(exe):
-            sys.exit("`%s` not found in PATH." % exe)
+            exes.append(exe)
+    if len(exes) > 0:
+        for exe in exes:
+            print("`%s` not found in PATH." % exe)
+        sys.exit(1)
 
 
 def name_from_path(path):
@@ -232,9 +239,10 @@ def gc_content(fasta, out_file, window_size=500, verbose=False):
 
     header = ["SEQUENCE_NAME", "POSITION", "SKEW", "CONTENT"]
     with file_transaction(out_file) as tx_out_file:
-        with open(tx_out_file.rpartition(".")[0],
-                  'w') as wfh, open(fasta) as rfh:
+        with open(tx_out_file.rpartition(".")[0], 'w') as wfh, open(fasta) as rfh:
+
             print(*header, sep="\t", file=wfh)
+
             for name, seq in readfa(rfh):
                 if len(seq) < window_size:
                     print(("Omitting record [%s] -- you may experience issues "
@@ -242,11 +250,8 @@ def gc_content(fasta, out_file, window_size=500, verbose=False):
                            "than %d nt") % (name, window_size))
                     continue
                 for point, skew, content in gc_skew_and_content(seq, window_size):
-                    print("%s\t%i\t%0.3f\t%0.3f" %
-                          (name, point, skew, content),
-                          file=wfh)
-        cmd = "gzip {tsv}".format(tsv=tx_out_file.rpartition(".")[0])
-        subprocess.check_call(cmd, shell=True)
+                    print("%s\t%i\t%0.3f\t%0.3f" % (name, point, skew, content), file=wfh)
+        subprocess.check_call(["gzip", tx_out_file.rpartition(".")[0]])
     return out_file
 
 
@@ -259,9 +264,11 @@ def blastp(fasta, out_file, db,
         return out_file
 
     if verbose:
-        print("Running blastp on %s using:" % fasta, "    -db %s" % db,
-              "    -num_alignments %d" % num_alignments, "    -evalue %f" %
-              evalue, "    -num_threads %d" % threads,
+        print("Running blastp on %s using:" % fasta,
+              "    -db %s" % db,
+              "    -num_alignments %d" % num_alignments,
+              "    -evalue %f" % evalue,
+              "    -num_threads %d" % threads,
               sep="\n",
               file=sys.stderr)
 
@@ -289,7 +296,7 @@ def blastp(fasta, out_file, db,
                                                    evalue=evalue,
                                                    out=nongz)
         subprocess.check_call(cmd, shell=True)
-        subprocess.check_call("gzip {tsv}".format(tsv=nongz), shell=True)
+        subprocess.check_call(["gzip", nongz])
     return out_file
 
 
@@ -341,10 +348,8 @@ def diamond_view(daa, out_file, verbose=False):
 
     with file_transaction(out_file) as tx_out_file:
         nongz = tx_out_file.rpartition(".")[0]
-        cmd = ("diamond view -a {daa} -o {out}").format(daa=daa, out=nongz)
-        subprocess.check_call(cmd, shell=True)
-        cmd = "gzip {tsv}".format(tsv=nongz)
-        subprocess.check_call(cmd, shell=True)
+        subprocess.check_call(["diamond", "view", "-a", daa, "-o", nongz])
+        subprocess.check_call(["gzip", nongz])
     return out_file
 
 
@@ -402,8 +407,7 @@ def alignment_coverage(daa, tsv, fasta_index, out_file,
     name = name_from_path(daa)
     if verbose:
         print("Finding coverages per contig based coverage on hits above",
-              identity, "percent in", name,
-              file=sys.stderr)
+              identity, "percent in", name, file=sys.stderr)
 
     with file_transaction(out_file) as tx_out_file:
         tmpdir = os.path.dirname(tx_out_file)
@@ -624,13 +628,10 @@ def viralscan(fasta, output, query, name, threads, identity, verbose, db,
     trna_output = trnascan(fasta, os.path.join(output, "tRNAscan",
                                                name + "-tRNAscan.txt"),
                            verbose)
-
-    # check here to verify trna converted something.
-
     # gc content and skew
     gc_output = gc_content(fasta,
                            os.path.join(output, name + "_gc_content.tsv.gz"),
-                           verbose)
+                           verbose=verbose)
     # blastp
     blastp_tsv = blastp(p_proteins,
                         os.path.join(output, name + "_blastp.tsv.gz"), db,

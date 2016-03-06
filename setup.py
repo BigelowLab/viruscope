@@ -1,12 +1,17 @@
 from setuptools import setup
 
 
+_locals = {}
+with open('viralscan.py') as fp:
+    exec(fp.read(), None, _locals)
+version = _locals['__version__']
+
 setup(
     name='viralscan',
-    version='0.1.9',
+    version=version,
     url='https://github.com/BigelowLab/viralscan',
     license='',
-    author='Joe Brown',
+    author='Joe Brown', 'Ben Tupper'
     author_email='jmbrown@bigelow.org',
     description='',
     long_description=__doc__,

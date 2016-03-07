@@ -1351,10 +1351,22 @@ summarize <- function(x = SUMMARY, master = MASTERNAMES,
 
 #' Write the summary table to file
 #' @param x the list of summary tables
+#' @param keep charcater vector of columns to keep, 'all' to keep all
 #' @param output the name of the output file
 write_summary <- function(x = summarize(), 
+   keep = c("contig_length","gene_count","viral_phage_gene_count",
+      "viral_phage_gene_fraction","viral2_phage_gene_count",
+      "viral2_phage_gene_fraction","Similarity_1.LineP.all.fr",
+      "Similarity_1.POV.fr","ratio_virus_bacteria","virus_class","virus_prob"),
    output = file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "-summary.csv.gz")) ) {
    
+   if (!('all' %in names(x)){
+      ix <- keep %in% names(x)
+      if (!all(ix)) {
+         warning(paste("some keep columns not found: ", paste(keep[!ix], collapse = ' ')) )
+      }
+      x <- x[,keep[ix]] 
+   }
    ff <- gzfile(output, "w")
    write.csv(x, file = ff, row.names = TRUE, quote = FALSE)
    close(ff)

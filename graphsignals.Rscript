@@ -1541,7 +1541,8 @@ virus_class <- function(x,y,
    }
    
    TRAIN <- na.omit(TRAIN)
-   
+   TRAIN[,1] <- log10(.0001+TRAIN[,1])
+   TRAIN[,2] <- log10(TRAIN[,2])
    
    # >0.5 is a virus
    # <= 0.5 is non-virus

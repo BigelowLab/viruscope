@@ -1360,7 +1360,7 @@ write_summary <- function(x = summarize(),
       "Similarity_1.POV.fr","ratio_virus_bacteria","virus_class","virus_prob"),
    output = file.path(OUTPUT_PATH, paste0(SAMPLE_NAME, "-summary.csv.gz")) ) {
    
-   if (!('all' %in names(x)){
+   if (!('all' %in% names(x))){
       ix <- keep %in% names(x)
       if (!all(ix)) {
          warning(paste("some keep columns not found: ", paste(keep[!ix], collapse = ' ')) )

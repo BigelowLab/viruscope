@@ -1390,7 +1390,10 @@ get_file_from_config <- function(name, section = "inputs",cfg = CFG,
    }
    if (relative) fname <- file.path(path, fname)
    if (!file.exists(fname)){
-      flog.error("file for %s not found", fname, name)
+      fname <- if(relative) file.path(path, paste0(fname, '.gz')) else paste0(fname, '.gz')
+   }
+   if (!file.exists(fname)){
+      flog.error("file %s not found", fname, name)
       viralsignals_quit(status = 1)
    }      
    return(fname)

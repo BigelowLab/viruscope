@@ -14,7 +14,7 @@ def get_version(relpath):
         return line.split("'")[1]
 
 setup(
-    name='viralscan',
+    name='viruscope',
     version=get_version("viruscope.py"),
     url='https://github.com/BigelowLab/viruscope',
     license='',

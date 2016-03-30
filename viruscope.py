@@ -1,5 +1,5 @@
 """
-viral-SCan, a tool specifically developed to identify viral sequences in single amplified genomes. Viral-SCan uses a
+viral-SCan, a tool specifically developed to identify viral sequences in single amplified genomes. Viruscope uses a
 combination of BLAST annotations, genomic anomalies (GC content and tetramer frequencies), and contrasting fragment
 recruitment of viral and bacterial metagenomic reads to identify viral sequences in the generally fragmented single
 cell genomes.
@@ -610,7 +610,7 @@ log=false
     return cfg_file
 
 
-def viralscan(fasta, output, query, name, threads, identity, verbose, db,
+def viruscope(fasta, output, query, name, threads, identity, verbose, db,
               num_alignments, evalue, script_path, window_size, step_size,
               training_file, knn_k):
     check_dependencies(REQUIRES)
@@ -736,9 +736,9 @@ def main():
                            help="step size for window")
 
     classifiero = p.add_argument_group('Classifier options')
-    # having these options here implies viralscan runs the classifier
+    # having these options here implies viruscope runs the classifier
     # rather than simply filling the config file
-    # TODO: write config file separately or include classifier as part of viral-scan
+    # TODO: write config file separately or include classifier as part of viruscope
     classifiero.add_argument('--training-file',
                              type=lambda x: _file_exists(p, x),
                              help="classifier training file")
@@ -748,7 +748,7 @@ def main():
                             help="nearest neighbors for classifier")
 
     args = vars(p.parse_args())
-    viralscan(**args)
+    viruscope(**args)
 
 
 if __name__ == '__main__':

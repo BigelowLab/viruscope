@@ -1,4 +1,4 @@
-# viral-SCan
+# ViruScope
 A tool specifically developed to identify viral sequences in single amplified genomes. Viral-SCan uses a
 combination of BLAST annotations, genomic anomalies (GC content and tetramer frequencies), and contrasting fragment
 recruitment of viral and bacterial metagenomic reads to identify viral sequences in the generally fragmented single
@@ -42,7 +42,7 @@ usage: viral-scan [-h] [-v] [-n NAME] [-t THREADS] [-i IDENTITY] [--verbose]
                     [--training-file TRAINING_FILE] [--knn-k KNN_K]
                     fasta output query [query ...]
 
-viral-SCan, a tool specifically developed to identify viral sequences in
+ViruScope, a tool specifically developed to identify viral sequences in
 single amplified genomes. Viral-SCan uses a combination of BLAST annotations,
 genomic anomalies (GC content and tetramer frequencies), and contrasting
 fragment recruitment of viral and bacterial metagenomic reads to identify

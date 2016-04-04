@@ -14,18 +14,18 @@ def get_version(relpath):
         return line.split("'")[1]
 
 setup(
-    name='viralscan',
-    version=get_version("viralscan.py"),
-    url='https://github.com/BigelowLab/viralscan',
+    name='viruscope',
+    version=get_version("viruscope.py"),
+    url='https://github.com/BigelowLab/viruscope',
     license='',
     author='Joe Brown, Ben Tupper',
     author_email='jmbrown@bigelow.org',
     description='',
     long_description=__doc__,
-    py_modules=['viralscan'],
+    py_modules=['viruscope'],
     install_requires=[],
     entry_points='''
         [console_scripts]
-        viral-scan=viralscan:main
+        viruscope=viruscope:main
     '''
 )

@@ -1,8 +1,8 @@
-# ViruScope
-A tool specifically developed to identify viral sequences in single amplified genomes. Viruscope uses a
+# ViruSCope
+A tool specifically developed to identify viral sequences in single amplified genomes. ViruSCope uses a
 combination of BLAST annotations, genomic anomalies (GC content and tetramer frequencies), and contrasting fragment
 recruitment of viral and bacterial metagenomic reads to identify viral sequences in the generally fragmented single
-cell genomes. Viruscope is a two-step program that was written in python for the data processing (`viruscope`) and R
+cell genomes. ViruSCope is a two-step program that was written in python for the data processing (`viruscope`) and R
 (`graphsignals.Rscript`) to produce the final graphical and tabular output identifying the viral contigs.
 
 # Install
@@ -35,18 +35,6 @@ python setup.py install
 
 ```
 $ viruscope -h
-usage: viruscope [-h] [-v] [-n NAME] [-t THREADS] [-i IDENTITY] [--verbose]
-                    [--db DB] [--num-alignments NUM_ALIGNMENTS]
-                    [--evalue EVALUE] [--script-path SCRIPT_PATH]
-                    [--window-size WINDOW_SIZE] [--step-size STEP_SIZE]
-                    [--training-file TRAINING_FILE] [--knn-k KNN_K]
-                    fasta output query [query ...]
-
-ViruScope, a tool specifically developed to identify viral sequences in
-single amplified genomes. Viruscope uses a combination of BLAST annotations,
-genomic anomalies (GC content and tetramer frequencies), and contrasting
-fragment recruitment of viral and bacterial metagenomic reads to identify
-viral sequences in the generally fragmented single cell genomes.
 
 positional arguments:
   fasta                 FASTA file of sequences to analyze.

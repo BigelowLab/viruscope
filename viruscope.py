@@ -1,5 +1,5 @@
 """
-viral-SCan, a tool specifically developed to identify viral sequences in single amplified genomes. Viruscope uses a
+ViruSCope, a tool specifically developed to identify viral sequences in single amplified genomes. ViruSCope uses a
 combination of BLAST annotations, genomic anomalies (GC content and tetramer frequencies), and contrasting fragment
 recruitment of viral and bacterial metagenomic reads to identify viral sequences in the generally fragmented single
 cell genomes.
@@ -20,7 +20,7 @@ import time
 from distutils.spawn import find_executable
 
 
-__version_info__ = (0, 2, 0)
+__version_info__ = (0, 3, 0)
 __version__ = '.'.join(map(str, __version_info__))
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]

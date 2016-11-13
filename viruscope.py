@@ -354,7 +354,7 @@ def diamond_view(daa, out_file, verbose=False):
 
 
 def alignment_coverage(daa, tsv, fasta_index, out_file,
-                       identity=50.0,
+                       identity=50.0, threads=8,
                        verbose=False):
     """
     daa is diamond alignment archive
@@ -392,12 +392,13 @@ def alignment_coverage(daa, tsv, fasta_index, out_file,
                     print(*l, sep="\t", file=filtered_sam)
         return out_file
 
-    def _sam_to_bam(sam, idx, out_file):
-        cmd = ("samtools view -Sbht {index} {sam} 2> /dev/null "
-               "| samtools sort -m 8G - {bam} 2> /dev/null"
-              ).format(index=idx,
+    def _sam_to_bam(sam, idx, out_file, threads=8):
+        cmd = ("samtools view -@ {t} -bSht {index} {sam} 2> /dev/null "
+               "| samtools sort -@ {t} -m 2G - > {bam} 2> /dev/null"
+              ).format(t=threads,
+                       index=idx,
                        sam=sam,
-                       bam=out_file.rpartition(".")[0])
+                       bam=out_file.rpartition(".")[0] + ".bam")
         subprocess.check_call(cmd, shell=True)
         return out_file
 
@@ -426,7 +427,7 @@ def alignment_coverage(daa, tsv, fasta_index, out_file,
                                    os.path.join(tmpdir, "filtered.sam"))
         # convert sam to bam
         bam = _sam_to_bam(filtered_sam, fasta_index,
-                          os.path.join(tmpdir, "filtered.bam"))
+                          os.path.join(tmpdir, "filtered.bam"), threads=threads)
         cmd = "bedtools genomecov -d -ibam {bam} | gzip > {out}".format(
             bam=bam,
             out=tx_out_file)
@@ -655,7 +656,7 @@ def viruscope(fasta, output, query, name, threads, identity, verbose, db,
                                           p_proteins_index,
                                           os.path.join(output, "coverage",
                                                        qname + ".tsv.gz"),
-                                          identity, verbose)
+                                          identity, threads, verbose)
         if coverage_tsv:
             query_results[qname] = dict(coverage=coverage_tsv,
                                         fasta=q,

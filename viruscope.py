@@ -359,7 +359,7 @@ def alignment_coverage(daa, tsv, fasta_index, out_file,
     """
     daa is diamond alignment archive
     tsv is gzipped diamond tab view file
-    out_file is a tsv of chrome, 1-based position, count
+    out_file is a tsv of chrom, 1-based position, count
     """
 
     def _hit_set_from_tsv(tsv, identity=50.0):

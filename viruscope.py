@@ -341,6 +341,9 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
                 "-AS {AS} -A {A} -uL {uL} -uS {uS} -U {U} -B {B} "
                 "-p 1 -g {g} -sc {sc} -sf {sf}").format(output_fasta=tx_out_files[0], **locals())
         subprocess.check_call(cmd, shell=True)
+        # copy the clstr output to its temp file location; let file_transaction clean up
+        shutil.copyfile("{fa}.clstr".format(fa=tx_out_files[0]), tx_out_files[1])
+
     return output_files
 
 
@@ -363,6 +366,7 @@ def blastp(fasta, out_file, db,
 
     with file_transaction(out_file) as tx_out_file:
         nongz = tx_out_file.rpartition(".")[0]
+        tmp_blastp_output = tx_out_file.rpartition(".")[0] + ".tmp"
 
         fields = ["qseqid", "sseqid", "pident", "length", "mismatch",
                   "gapopen", "qstart", "qend", "sstart", "send", "evalue",
@@ -370,21 +374,28 @@ def blastp(fasta, out_file, db,
                   "gaps", "ppos", "qframe", "sframe", "qseq", "sseq", "qlen",
                   "slen", "salltitles"]
 
-        with open(nongz, 'w') as fo:
-            print(*fields, sep="\t", file=fo)
-
+        # replace this with respective mica command line
         cmd = ("blastp -db {db} -query {query} -outfmt "
                "'6 {fields}' "
                "-num_threads {threads} "
                "-num_alignments {alignments} "
-               "-evalue {evalue} >> {out}").format(db=db,
-                                                   query=fasta,
-                                                   fields=" ".join(fields),
-                                                   threads=threads,
-                                                   alignments=num_alignments,
-                                                   evalue=evalue,
-                                                   out=nongz)
+               "-evalue {evalue} > {out}").format(db=db,
+                                                  query=fasta,
+                                                  fields=" ".join(fields),
+                                                  threads=threads,
+                                                  alignments=num_alignments,
+                                                  evalue=evalue,
+                                                  out=tmp_blastp_output)
         subprocess.check_call(cmd, shell=True)
+
+        # read in clusters
+        # iterate over blastp output and add lines from clusters
+            # if there is an entry, add the cluster lines
+
+
+        with open(nongz, 'w') as fo:
+            print(*fields, sep="\t", file=fo)
+
         subprocess.check_call(["gzip", nongz])
     return out_file
 
@@ -722,10 +733,15 @@ def viruscope(fasta, output, query, name, threads, identity, verbose, db,
     gc_output = gc_content(fasta,
                            os.path.join(output, name + "_gc_content.tsv.gz"),
                            verbose=verbose)
-    # blastp
+
+    # cluster proteins to reduce blastp input size
+
+
+    # blastp -- replacing this step with mica?
     blastp_tsv = blastp(p_proteins,
                         os.path.join(output, name + "_blastp.tsv.gz"), db,
                         num_alignments, evalue, threads, verbose)
+
     # create database
     protein_db = make_diamond_db(p_proteins,
                                  os.path.join(output, "diamond",

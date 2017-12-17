@@ -14,14 +14,15 @@ import itertools
 import os
 import shutil
 import subprocess
+import six
 import sys
 import tempfile
 import time
 from distutils.spawn import find_executable
 
 
-__version_info__ = (0, 3, 0)
-__version__ = '.'.join(map(str, __version_info__))
+__version_info__ = (0, 4, 0)
+__version__ = '.'.join(map(six.string_types[0], __version_info__))
 REQUIRES = ["bedtools", "samtools", "prodigal", "tRNAscan-SE", "blastp",
             "diamond", "gzip", "gunzip", "Rscript"]
 
@@ -74,7 +75,7 @@ def _flatten_plus_safe(rollback_files):
     """
     tx_files, orig_files = [], []
     for fnames in rollback_files:
-        if isinstance(fnames, basestring):
+        if isinstance(fnames, six.string_types):
             fnames = [fnames]
         for fname in fnames:
             basedir = safe_makedir(os.path.dirname(fname))
@@ -114,7 +115,7 @@ def file_exists(fnames):
     returns
         boolean
     """
-    if isinstance(fnames, basestring):
+    if isinstance(fnames, six.string_types):
         fnames = [fnames]
     for f in fnames:
         if not os.path.exists(f) or os.path.getsize(f) == 0:
@@ -253,6 +254,94 @@ def gc_content(fasta, out_file, window_size=500, verbose=False):
                     print("%s\t%i\t%0.3f\t%0.3f" % (name, point, skew, content), file=wfh)
         subprocess.check_call(["gzip", tx_out_file.rpartition(".")[0]])
     return out_file
+
+
+def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
+    T=1, n=5, l=10, t=2, d=20, s=0.0, S=999999, aL=0.0, AL=99999999, aS=0.0,
+    AS=99999999, A=0, uL=1.0, uS=1.0, U=99999999, B=0, g=0, sc=0, sf=0):
+    """Run CD-HIT to cluster input FASTA.
+
+    Args:
+        input_fa (str): File path to fasta.
+        output_fa (str): File path of output fasta.
+        c (Optional[float]): sequence identity threshold, default 0.9
+ 	        this is the default cd-hit's "global sequence identity" calculated as:
+ 	        number of identical amino acids in alignment
+            divided by the full length of the shorter sequence
+        G (Optional[int]): use global sequence identity, default 1
+ 	        if set to 0, then use local sequence identity, calculated as :
+            number of identical amino acids in alignment
+ 	        divided by the length of the alignment
+ 	        NOTE!!! don't use -G 0 unless you use alignment coverage controls
+ 	        see options -aL, -AL, -aS, -AS
+        b (Optional[int]): band_width of alignment, default 20
+        M (Optional[int]): memory limit (in MB) for the program, default 800; 0 for unlimited
+        T (Optional[int]): number of threads, default 1; with 0, all CPUs will be used
+        n (Optional[int]): word_length, default 5, see user's guide for choosing it
+        l (Optional[int]): length of throw_away_sequences, default 10
+        t (Optional[int]): tolerance for redundance, default 2
+        d (Optional[int]): length of description in .clstr file, default 20
+ 	        if set to 0, it takes the fasta defline and stops at first space
+        s (Optional[float]): length difference cutoff, default 0.0
+ 	        if set to 0.9, the shorter sequences need to be
+            at least 90% length of the representative of the cluster
+        S (Optional[int]): length difference cutoff in amino acid, default 999999
+ 	        if set to 60, the length difference between the shorter sequences
+ 	        and the representative of the cluster can not be bigger than 60
+        aL (Optional[float]): alignment coverage for the longer sequence, default 0.0
+ 	        if set to 0.9, the alignment must covers 90% of the sequence
+        AL (Optional[int]): alignment coverage control for the longer sequence, default 99999999
+ 	        if set to 60, and the length of the sequence is 400,
+ 	        then the alignment must be >= 340 (400-60) residues
+        aS (Optional[float]): alignment coverage for the shorter sequence, default 0.0
+        	if set to 0.9, the alignment must covers 90% of the sequence
+        AS (Optional[int]): alignment coverage control for the shorter sequence, default 99999999
+        	if set to 60, and the length of the sequence is 400,
+        	then the alignment must be >= 340 (400-60) residues
+        A (Optional[int]): minimal alignment coverage control for the both sequences, default 0
+        	alignment must cover >= this value for both sequences
+        uL (Optional[float]): maximum unmatched percentage for the longer sequence, default 1.0
+        	if set to 0.1, the unmatched region (excluding leading and tailing gaps)
+        	must not be more than 10% of the sequence
+        uS (Optional[float]): maximum unmatched percentage for the shorter sequence, default 1.0
+        	if set to 0.1, the unmatched region (excluding leading and tailing gaps)
+        	must not be more than 10% of the sequence
+        U (Optional[int]): maximum unmatched length, default 99999999
+        	if set to 10, the unmatched region (excluding leading and tailing gaps)
+        	must not be more than 10 bases
+        B (Optional[int]): 1 or 0, default 0, by default, sequences are stored in RAM
+        	if set to 1, sequence are stored on hard drive
+        	!! No longer supported !!
+        g (Optional[int]): 1 or 0, default 0
+        	by cd-hit's default algorithm, a sequence is clustered to the first
+        	cluster that meet the threshold (fast cluster). If set to 1, the program
+        	will cluster it into the most similar cluster that meet the threshold
+        	(accurate but slow mode)
+        	but either 1 or 0 won't change the representatives of final clusters
+        sc (Optional[int]): sort clusters by size (number of sequences), default 0, output clusters by decreasing length
+        	if set to 1, output clusters by decreasing size
+        sf (Optional[int]): sort fasta/fastq by cluster size (number of sequences), default 0, no sorting
+        	if set to 1, output sequences by decreasing cluster size
+
+    Returns:
+        list, [file path of output fasta, file path of output cluster definitions]
+
+    """
+    output_clstr = "{fa}.clstr".format(fa=output_fa)
+    output_files = [output_fa, output_clstr]
+    if file_exists(output_files):
+        return output_files
+
+    print("Running CD-HIT on {fa}".format(fa=input_fa), file=sys.stderr)
+
+    with file_transaction(output_files) as tx_out_files:
+        cmd = ("cd-hit -i {input_fa} -o {output_fasta} -c {c} "
+                "-G {G} -b {b} -M {M} -T {T} -n {n} -l {l} -t {t} "
+                "-d {d} -s {s} -S {S} -aL {aL} -AL {AL} -aS {aS} "
+                "-AS {AS} -A {A} -uL {uL} -uS {uS} -U {U} -B {B} "
+                "-p 1 -g {g} -sc {sc} -sf {sf}").format(output_fasta=tx_out_files[0], **locals())
+        subprocess.check_call(cmd, shell=True)
+    return output_files
 
 
 def blastp(fasta, out_file, db,
@@ -680,7 +769,7 @@ def viruscope(fasta, output, query, name, threads, identity, verbose, db,
 
 def main():
     def _file_exists(parser, arg):
-        if isinstance(arg, basestring):
+        if isinstance(arg, six.string_types):
             tmparg = [arg]
         for a in tmparg:
             if not os.path.exists(a):

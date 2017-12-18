@@ -9,6 +9,7 @@ from __future__ import print_function
 
 import argparse
 import contextlib
+import fileinput
 import gzip
 import itertools
 import os
@@ -192,11 +193,36 @@ def trnascan(fasta, out_file, verbose=False):
 def readfa(fh):
     for header, group in itertools.groupby(fh, lambda line: line[0] == '>'):
         if header:
-            line = group.next()
+            line = next(group)
             name = line[1:].strip()
         else:
             seq = ''.join(line.strip() for line in group)
             yield name, seq
+
+
+def format_fasta_record(name, seq, wrap=100):
+    """Fasta __str__ method.
+
+    Convert fasta name and sequence into wrapped fasta format.
+
+    Args:
+        name (str): name of the record
+        seq (str): sequence of the record
+        wrap (int): length of sequence per line
+
+    Returns:
+        tuple: name, sequence
+
+    >>> format_fasta_record("seq1", "ACTG")
+    ">seq1\nACTG"
+    """
+    record = ">{name}\n".format(name=name)
+    if wrap:
+        for i in range(0, len(seq), wrap):
+            record += seq[i:i+wrap] + "\n"
+    else:
+        record += seq + "\n"
+    return record.strip()
 
 
 def gc_skew_and_content(seq, window_size=500):
@@ -217,7 +243,7 @@ def gc_skew_and_content(seq, window_size=500):
     seq_len = len(seq)
     assert seq_len >= window_size
 
-    for start in xrange(0, seq_len - window_size + 1):
+    for start in range(0, seq_len - window_size + 1):
         stop = start + window_size
         mid = stop - half_window
         s = seq[start:stop]
@@ -258,7 +284,7 @@ def gc_content(fasta, out_file, window_size=500, verbose=False):
 
 def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
     T=1, n=5, l=10, t=2, d=20, s=0.0, S=999999, aL=0.0, AL=99999999, aS=0.0,
-    AS=99999999, A=0, uL=1.0, uS=1.0, U=99999999, B=0, g=0, sc=0, sf=0):
+    AS=99999999, A=0, uL=1.0, uS=1.0, U=99999999, g=1, sc=0, sf=0):
     """Run CD-HIT to cluster input FASTA.
 
     Args:
@@ -309,11 +335,8 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
         U (Optional[int]): maximum unmatched length, default 99999999
         	if set to 10, the unmatched region (excluding leading and tailing gaps)
         	must not be more than 10 bases
-        B (Optional[int]): 1 or 0, default 0, by default, sequences are stored in RAM
-        	if set to 1, sequence are stored on hard drive
-        	!! No longer supported !!
-        g (Optional[int]): 1 or 0, default 0
-        	by cd-hit's default algorithm, a sequence is clustered to the first
+        g (Optional[int]): 1 or 0, default 1
+        	when 0 a sequence is clustered to the first
         	cluster that meet the threshold (fast cluster). If set to 1, the program
         	will cluster it into the most similar cluster that meet the threshold
         	(accurate but slow mode)
@@ -334,20 +357,69 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
 
     print("Running CD-HIT on {fa}".format(fa=input_fa), file=sys.stderr)
 
+    contig_name_map = {}
+    tmp_fasta = "{fa}.rename.tmp".format(fa=input_fa)
+    with open(input_fa) as f_in, open(tmp_fasta, "w") as f_out:
+        for i, (name, seq) in enumerate(readfa(f_in), start=1):
+            contig_name_map["%d" % i] = name
+            print(format_fasta_record(i, seq), file=f_out)
+
     with file_transaction(output_files) as tx_out_files:
-        cmd = ("cd-hit -i {input_fa} -o {output_fasta} -c {c} "
+        cmd = ("cd-hit -i {input_fasta} -o {output_fasta} -c {c} "
                 "-G {G} -b {b} -M {M} -T {T} -n {n} -l {l} -t {t} "
                 "-d {d} -s {s} -S {S} -aL {aL} -AL {AL} -aS {aS} "
-                "-AS {AS} -A {A} -uL {uL} -uS {uS} -U {U} -B {B} "
-                "-p 1 -g {g} -sc {sc} -sf {sf}").format(output_fasta=tx_out_files[0], **locals())
+                "-AS {AS} -A {A} -uL {uL} -uS {uS} -U {U} "
+                "-p 1 -g {g} -sc {sc} -sf {sf}").format(input_fasta=tmp_fasta,
+                                                        output_fasta=tx_out_files[0],
+                                                        **locals())
         subprocess.check_call(cmd, shell=True)
         # copy the clstr output to its temp file location; let file_transaction clean up
         shutil.copyfile("{fa}.clstr".format(fa=tx_out_files[0]), tx_out_files[1])
 
+        # update change the contig names in the cluster file back to original
+        for line in fileinput.input(tx_out_files[0], inplace=True):
+            line = line.strip()
+            if line.startswith(">"):
+                name = contig_name_map[line.strip(">")]
+                print(">{name}".format(name=name))
+            else:
+                print(line)
+
+        # change the contig names in the cluster file
+        for line in fileinput.input(tx_out_files[1], inplace=True):
+            line = line.strip()
+            if not line.startswith(">"):
+                # changes this:
+                # 1	382aa, >6... at 1:382:1:382/100.00%
+                # to just the original contig name
+                print(contig_name_map[line.partition(">")[-1].partition("...")[0]])
+            else:
+                # this is the cluster ID
+                print(line)
+
+    if file_exists(tmp_fasta):
+        os.remove(tmp_fasta)
+
     return output_files
 
 
-def blastp(fasta, out_file, db,
+>Cluster 0
+0	382aa, >sp|P68463|I6_VACCC... *
+1	382aa, >sp|P68462|I6_VACCW... at 1:382:1:382/100.00%
+2	382aa, >tr|A0A212Q3L5|A0A21... at 1:382:1:382/100.00%
+3	382aa, >tr|A0A0A1CV00|A0A0A... at 1:382:1:382/100.00%
+>Cluster 1
+0	111aa, >sp|P68459|G3_VACCC... *
+1	111aa, >sp|P68458|G3_VACCW... at 1:111:1:111/100.00%
+2	111aa, >tr|H2DV02|H2DV02_9P... at 1:111:1:111/100.00%
+3	111aa, >tr|B9U1F9|B9U1F9_9P... at 1:111:1:111/100.00%
+>Cluster 2
+0	42aa, >tr|Q6LC00|Q6LC00_RA... *
+
+for cluster,
+
+
+def blastp(fasta, clstr, out_file, db,
            num_alignments=10,
            evalue=0.001,
            threads=1,
@@ -735,10 +807,11 @@ def viruscope(fasta, output, query, name, threads, identity, verbose, db,
                            verbose=verbose)
 
     # cluster proteins to reduce blastp input size
-
+    # still needs command line access to relevant subset of params
+    cluster_fasta, cluster_defs = run_cd_hit(p_proteins, os.path.join(output, name + "_clusters.fasta"), c=0.90)
 
     # blastp -- replacing this step with mica?
-    blastp_tsv = blastp(p_proteins,
+    blastp_tsv = blastp(cluster_fasta, cluster_defs,
                         os.path.join(output, name + "_blastp.tsv.gz"), db,
                         num_alignments, evalue, threads, verbose)
 

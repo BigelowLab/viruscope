@@ -19,6 +19,7 @@ import six
 import sys
 import tempfile
 import time
+from collections import defaultdict
 from distutils.spawn import find_executable
 
 
@@ -376,6 +377,9 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
         # copy the clstr output to its temp file location; let file_transaction clean up
         shutil.copyfile("{fa}.clstr".format(fa=tx_out_files[0]), tx_out_files[1])
 
+        # edit the output files in place back to their original names
+        # changes the format of the cluster file
+
         # update change the contig names in the cluster file back to original
         for line in fileinput.input(tx_out_files[0], inplace=True):
             line = line.strip()
@@ -389,7 +393,7 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
         for line in fileinput.input(tx_out_files[1], inplace=True):
             line = line.strip()
             if not line.startswith(">"):
-                # changes this:
+                # changes:
                 # 1	382aa, >6... at 1:382:1:382/100.00%
                 # to just the original contig name
                 print(contig_name_map[line.partition(">")[-1].partition("...")[0]])
@@ -401,22 +405,6 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
         os.remove(tmp_fasta)
 
     return output_files
-
-
->Cluster 0
-0	382aa, >sp|P68463|I6_VACCC... *
-1	382aa, >sp|P68462|I6_VACCW... at 1:382:1:382/100.00%
-2	382aa, >tr|A0A212Q3L5|A0A21... at 1:382:1:382/100.00%
-3	382aa, >tr|A0A0A1CV00|A0A0A... at 1:382:1:382/100.00%
->Cluster 1
-0	111aa, >sp|P68459|G3_VACCC... *
-1	111aa, >sp|P68458|G3_VACCW... at 1:111:1:111/100.00%
-2	111aa, >tr|H2DV02|H2DV02_9P... at 1:111:1:111/100.00%
-3	111aa, >tr|B9U1F9|B9U1F9_9P... at 1:111:1:111/100.00%
->Cluster 2
-0	42aa, >tr|Q6LC00|Q6LC00_RA... *
-
-for cluster,
 
 
 def blastp(fasta, clstr, out_file, db,
@@ -435,6 +423,14 @@ def blastp(fasta, clstr, out_file, db,
               "    -num_threads %d" % threads,
               sep="\n",
               file=sys.stderr)
+
+    cluster_map = defaultdict(list)
+    with open(clstr) as fh:
+        for cluster_start, group in itertools.groupby(fh, lambda l: l[0] == '>'):
+            # clusters with only one member will not be added into the map
+            rep_seq = next(group).strip()
+            for line in group:
+                cluster_map[rep_seq].append(line.strip())
 
     with file_transaction(out_file) as tx_out_file:
         nongz = tx_out_file.rpartition(".")[0]
@@ -460,10 +456,10 @@ def blastp(fasta, clstr, out_file, db,
                                                   out=tmp_blastp_output)
         subprocess.check_call(cmd, shell=True)
 
-        # read in clusters
-        # iterate over blastp output and add lines from clusters
+        # iterate over blastp output and add lines from cluster_map
             # if there is an entry, add the cluster lines
-
+            # was thinking to just use the identical stats of the parent line
+            # despite obvious inconsistencies -- they are likely inconsequential
 
         with open(nongz, 'w') as fo:
             print(*fields, sep="\t", file=fo)

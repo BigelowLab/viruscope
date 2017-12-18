@@ -434,7 +434,6 @@ def blastp(fasta, clstr, out_file, db,
 
     with file_transaction(out_file) as tx_out_file:
         nongz = tx_out_file.rpartition(".")[0]
-        tmp_blastp_output = tx_out_file.rpartition(".")[0] + ".tmp"
 
         fields = ["qseqid", "sseqid", "pident", "length", "mismatch",
                   "gapopen", "qstart", "qend", "sstart", "send", "evalue",
@@ -442,27 +441,37 @@ def blastp(fasta, clstr, out_file, db,
                   "gaps", "ppos", "qframe", "sframe", "qseq", "sseq", "qlen",
                   "slen", "salltitles"]
 
+        with open(nongz, 'w') as fo:
+            print(*fields, sep="\t", file=fo)
+
         # replace this with respective mica command line
         cmd = ("blastp -db {db} -query {query} -outfmt "
                "'6 {fields}' "
                "-num_threads {threads} "
                "-num_alignments {alignments} "
-               "-evalue {evalue} > {out}").format(db=db,
+               "-evalue {evalue} >> {out}").format(db=db,
                                                   query=fasta,
                                                   fields=" ".join(fields),
                                                   threads=threads,
                                                   alignments=num_alignments,
                                                   evalue=evalue,
-                                                  out=tmp_blastp_output)
+                                                  out=nongz)
         subprocess.check_call(cmd, shell=True)
 
-        # iterate over blastp output and add lines from cluster_map
-            # if there is an entry, add the cluster lines
-            # was thinking to just use the identical stats of the parent line
-            # despite obvious inconsistencies -- they are likely inconsequential
-
-        with open(nongz, 'w') as fo:
-            print(*fields, sep="\t", file=fo)
+        # update local alignments in place
+        # when we find a representative sequence, its clustered sequences
+        # are output with the representative sequence's stats
+        for line in fileinput.input(nongz, inplace=True):
+            toks = line.strip().split("\t")
+            # output alignment of current sequence
+            print(*toks, sep="\t")
+            try:
+                for clustered_seq in cluster_map[toks[0]]:
+                    # if the alignment stats are used for anything downstream
+                    # we'll have to look into this implication
+                    print(clustered_seq, *toks[1:], sep="\t")
+            except KeyError:
+                pass
 
         subprocess.check_call(["gzip", nongz])
     return out_file

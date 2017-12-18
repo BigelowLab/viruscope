@@ -396,7 +396,11 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
                 # changes:
                 # 1	382aa, >6... at 1:382:1:382/100.00%
                 # to just the original contig name
-                print(contig_name_map[line.partition(">")[-1].partition("...")[0]])
+                # first contig listed not always seed, seed indicated by "*" in output, maintain mark for mapping
+                if "*" in line:
+                    print('{}*'.format(contig_name_map[line.partition(">")[-1].partition("...")[0]]))
+                else:
+                    print(contig_name_map[line.partition(">")[-1].partition("...")[0]])
             else:
                 # this is the cluster ID
                 print(line)
@@ -411,7 +415,7 @@ def blastp(fasta, clstr, out_file, db,
            num_alignments=10,
            evalue=0.001,
            threads=1,
-           verbose=False):
+           verbose=False, mica=True):
     if file_exists(out_file):
         return out_file
 
@@ -423,14 +427,6 @@ def blastp(fasta, clstr, out_file, db,
               "    -num_threads %d" % threads,
               sep="\n",
               file=sys.stderr)
-
-    cluster_map = defaultdict(list)
-    with open(clstr) as fh:
-        for cluster_start, group in itertools.groupby(fh, lambda l: l[0] == '>'):
-            # clusters with only one member will not be added into the map
-            rep_seq = next(group).strip()
-            for line in group:
-                cluster_map[rep_seq].append(line.strip())
 
     with file_transaction(out_file) as tx_out_file:
         nongz = tx_out_file.rpartition(".")[0]
@@ -445,20 +441,45 @@ def blastp(fasta, clstr, out_file, db,
             print(*fields, sep="\t", file=fo)
 
         # replace this with respective mica command line
-        cmd = ("blastp -db {db} -query {query} -outfmt "
-               "'6 {fields}' "
-               "-num_threads {threads} "
-               "-num_alignments {alignments} "
-               "-evalue {evalue} >> {out}").format(db=db,
-                                                  query=fasta,
-                                                  fields=" ".join(fields),
-                                                  threads=threads,
-                                                  alignments=num_alignments,
-                                                  evalue=evalue,
-                                                  out=nongz)
+        if mica:
+            assert os.path.isdir(db), "You have selected mica accelerated blast, make sure you've designated a mica database directory"
+            cmd = ("mica-search --p='{threads}' --blastp 'blastp' {db} {query} "
+                   "--blast-args -outfmt '6 {fields}' "
+                   "-num_alignments {alignments} -evalue {evalue} -out {out}").format(db=db,
+                                                      query=fasta,
+                                                      fields=" ".join(fields),
+                                                      threads=threads,
+                                                      alignments=num_alignments,
+                                                      evalue=evalue,
+                                                      out=nongz)
+        else:
+            cmd = ("blastp -db {db} -query {query} -outfmt "
+                   "'6 {fields}' "
+                   "-num_threads {threads} "
+                   "-num_alignments {alignments} "
+                   "-evalue {evalue} >> {out}").format(db=db,
+                                                      query=fasta,
+                                                      fields=" ".join(fields),
+                                                      threads=threads,
+                                                      alignments=num_alignments,
+                                                      evalue=evalue,
+                                                      out=nongz)
         subprocess.check_call(cmd, shell=True)
 
         # update local alignments in place
+        cluster_map = defaultdict(list)
+        with open(clstr) as fh:
+            for cluster_start, group in itertools.groupby(fh, lambda l: l[0] == '>'):
+                members = []
+                if not cluster_start:
+                    for line in group:
+                        if "*" in line:
+                            rep_seq = line.strip().replace("*", "")
+                        else:
+                            members.append(line.strip())
+                if len(members) > 0:
+                    cluster_map[rep_seq] = members
+
         # when we find a representative sequence, its clustered sequences
         # are output with the representative sequence's stats
         for line in fileinput.input(nongz, inplace=True):

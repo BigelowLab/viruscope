@@ -1,7 +1,8 @@
 import pandas as pd
 from collections import defaultdict
 import itertools
-from nb_tools import readfa, swap_cluster_map, orf_map
+from nb_tools import readfa, swap_cluster_map, orf_map_fa
+from recruitment_for_vs import summarize_by_contig
 
 
 def map_clstr_raw(clstr, singles=False):
@@ -36,18 +37,18 @@ def map_clstr_raw(clstr, singles=False):
 
 
 
-def phage_contig_table(clstr_map, gff, phage_hits_df, outfile=None):
+def phage_contig_table(clstr_map, prot_fasta, phage_hits_df, outfile=None):
     ''' create a summary of phage hits to contig orfs, mapping back cd-hit cluster seeds to orfs from individual genomes
     Args:
-        clstr_map (dict): cluster map
-        gff (path): path to gff output file for mapping orfs back to contigs
+        clstr_map (dict): cluster map with structure {orf:seed}
+        prot_fasta (path): path to protein fasta file for mapping orfs back to contigs
         phage_hits_df (pandas.DataFrame): phage hits dataframe from summary of all Mica results
         outfile (path): where to write output table, if None, none written
     Returns:
         pandas dataframe 
     '''
-    cm = swap_cluster_map(clstr_map)
-    om = orf_map(gff)
+    cm = clstr_map
+    om = orf_map_fa(prot_fasta)
     om['lookup'] = [cm.get(i, i) for i in om['id']]
     omp = pd.merge(phage_hits_df, om, left_on='orf', right_on='lookup', how='right').fillna(0)[['contig','id','p1','p2','len']]
     orf_count = pd.DataFrame(om.groupby('contig')['id'].count()).rename(columns={'id':'total_orfs'})

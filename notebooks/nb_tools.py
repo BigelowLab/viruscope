@@ -609,3 +609,17 @@ def id_virus_orfs(micaout,
                                 'p1':[1 if q in p1_true else 0 for q in list(qseqs)],
                                 'p2':[1 if q in p2_true else 0 for q in list(qseqs)]})
     return newdf
+
+def orf_map_fa(fasta):
+    names = []
+    contigs = []
+    lens = []
+
+    for name, seq in readfa(open(fasta)):
+        i = name.split(" ")[0]
+        names.append(i)
+        contig = "_".join(i.split("_")[:-1])
+        contigs.append(contig)
+        lens.append(len(seq) * 3)
+
+    return pd.DataFrame(data={'contig':contigs, 'id':names, 'len':lens})

@@ -20,6 +20,7 @@ import pandas as pd
 from scgc import readfx
 
 
+
 @contextlib.contextmanager
 def file_transaction(*rollback_files):
     """
@@ -234,7 +235,7 @@ def contig_lengths(infile):
                     outdict[vec[1]] = vec[-1]
     
     elif filetype == 'fasta':
-        for name, seq in read_fasta(open(infile)):
+        for name, seq, qual in readfx(infile):
             outdict[name] = len(seq)  
     return outdict
 
@@ -280,7 +281,7 @@ def map_orfs_to_contigs(df, contig_file):
         gdf = orf_map(contig_file)
         return pd.merge(df, gdf, on='orf', how='outer')
     else:
-        df['contig'] = ["_".join(i.split("_")[:-1]) for i in orfhits['orf']]
+        df['contig'] = ["_".join(i.split("_")[:-1]) for i in df['orf']]
         return df
     
 
@@ -311,6 +312,8 @@ def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
     clens = contig_lengths(contig_file)
     
     out_tbl = compute_fr(chits.reset_index(), clens, mult=1e6)
+    out_tbl['ratio_virus_bacteria'] = out_tbl['fr_mg-vir'] / out_tbl['fr_mg-bac']
+    out_tbl['ratio_virus_bacteria'] = [1000 if i == float('inf') else i for i in out_tbl['ratio_virus_bacteria']]
     
     return out_tbl
 
@@ -336,7 +339,7 @@ def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
              show_default=True)
 def main(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, verbose):
     '''
-    python recruitment_for_vs.py --threads 10 --output /mnt/scgc/simon/simonsproject/bats248_vs/diamond/pergenome/ --sag-contigs /mnt/scgc/simon/simonsproject/bats248_annotations/gff/AG-920-P22.gff /mnt/scgc/simon/simonsproject/bats248_annotations/faa/AG-920-P22.faa /mnt/scgc_nfs/ref/viral_dbs/POV.fasta.gz /mnt/scgc_nfs/ref/viral_dbs/LineP-all.fasta.gz
+python recruitment_for_vs.py --threads 10 --output /mnt/scgc/simon/simonsproject/bats248_vs/diamond/pergenome/ --sag-contigs /mnt/scgc/simon/simonsproject/bats248_contigs/coassemblies/AG-920/AG-920-P22_contigs.fasta  /mnt/scgc/simon/simonsproject/bats248_vs/prodigal/AG-920-P22_proteins.fasta /mnt/scgc_nfs/ref/viral_dbs/POV.fasta.gz /mnt/scgc_nfs/ref/viral_dbs/LineP-all.fasta.gz
     '''
     fa_name = op.basename(prot_fasta).split(".")[0]
     
@@ -366,7 +369,7 @@ def main(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, verbose):
         out_tbl = construct_recruit_tbl(tsv_list[0], tsv_list[1], read_count_dict, sag_contigs)
         out_tbl.to_csv(op.join(output, "{}_mg_diamond_recruitment_tbl.csv".format(fa_name)), sep=",", index=False)
 
-    os.remove(protein_db)
+    os.remove('{}.dmnd'.format(protein_db))
 
         
 if __name__ =='__main__':

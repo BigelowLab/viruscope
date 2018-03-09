@@ -4,7 +4,7 @@ from .tools import (file_transaction, remove_tmpdirs, remove_files,
 
 from .orf_setup import (prodigal, run_prodigal, run_batch_prodigal, concat_orfs,
     run_cd_hit, id_added_seeds, write_cluster_map, read_cluster_map, swap_cluster_map,
-    write_new_seeds_to_fasta, cluster_split_fa)
+    write_new_seeds, cluster_split_fa)
 
 from .phage_count import (map_clstr_raw, run_mica, run_blast, id_virus_orfs, orf_map_fa,
     phage_contig_table)

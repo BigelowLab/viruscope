@@ -295,16 +295,24 @@ def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
     Returns:
         pandas dataframe with mg fraction calculated
     '''
+    def _count_hits(df, name):
+        outser = pd.Series(df.groupby('sseqid')['qseqid'].count(), name=name)
+        if len(outser) == 0:
+            outdf = pd.DataFrame(columns=['orf',name])
+        else:
+            outdf = pd.DataFrame(outser).reset_index().rename(columns={'sseqid':'orf'})
+        return outdf
+    
     cnames = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore".split()
     bac_df = import_diamond_tsv(bac_tsv)
     vir_df = import_diamond_tsv(vir_tsv)
 
-    bac_sum = pd.Series(bac_df.groupby('sseqid')['qseqid'].count(), name='hit_mg-bac')
-    vir_sum = pd.Series(vir_df.groupby('sseqid')['qseqid'].count(), name='hit_mg-vir')
-
-    orfhits = pd.concat([bac_sum, vir_sum], axis=1).reset_index().rename(columns={'index':'orf'})
-    orfhits = map_orfs_to_contigs(orfhits, contig_file)
+    bac_sum = _count_hits(bac_df, 'hit_mg-bac')
+    vir_sum = _count_hits(vir_df, 'hit_mg-vir')
     
+    orfhits = pd.merge(bac_sum, vir_sum, on='orf', how='outer')[['orf','hit_mg-bac','hit_mg-vir']]
+    orfhits = map_orfs_to_contigs(orfhits, contig_file)
+
     chits = pd.concat([summarize_by_contig(orfhits, 'hit_mg-bac'), summarize_by_contig(orfhits, 'hit_mg-vir')], axis=1)
     chits['reads_mg-vir'] = float(read_count_dict['vir_reads'])
     chits['reads_mg-bac'] = float(read_count_dict['bac_reads'])
@@ -316,6 +324,7 @@ def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
     out_tbl['ratio_virus_bacteria'] = [1000 if i == float('inf') else i for i in out_tbl['ratio_virus_bacteria']]
     
     return out_tbl
+
 
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
@@ -349,6 +358,11 @@ python recruitment_for_vs.py --threads 10 --output /mnt/scgc/simon/simonsproject
                                  threads, verbose)
     
     tsv_list = []
+    if op.exists(op.join(output, "{}_mg_diamond_recruitment_tbl.csv".format(fa_name))):
+        print("output table already exists for {}!".format(fa_name))
+        return
+                 
+    
     
     for q in [vir_mg, bac_mg]:
         qname = op.basename(q).split(".")[0]

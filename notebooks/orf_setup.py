@@ -22,3 +22,17 @@ def prodigal(fasta, out_files, verbose=False):
                        score=tx_out_files[3])
         subprocess.check_call(cmd, shell=True)
     return out_files
+
+def prodigal_cmd(fasta, outdir):
+    outfiles = [os.path.join(outdir, name + "_proteins.fasta"),
+                os.path.join(outdir, "prodigal", name + "_genes.fasta"),
+                os.path.join(outdir, "prodigal", name + ".gbk"),
+                os.path.join(outdir, "prodigal", name + ".scores")]
+    cmd = ("prodigal -a {proteins} -d {genes} "
+               "-i {fasta} -o {genbank} -p meta -s {score}"
+              ).format(proteins=out_files[0],
+                       genes=out_files[1],
+                       fasta=fasta,
+                       genbank=out_files[2],
+                       score=out_files[3])
+    return cmd

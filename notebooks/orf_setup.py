@@ -23,6 +23,7 @@ def prodigal(fasta, out_files, verbose=False):
         subprocess.check_call(cmd, shell=True)
     return out_files
 
+<<<<<<< HEAD
 def run_prodigal(f, workingdir = "./"):
 
     name = op.basename(f).split(".")[0].split("_")[0]
@@ -252,3 +253,18 @@ def cluster_split_fa(fasta, outdir, seq_num=1000, pctid=70):
 
 
 def process_input_fastas(fa_dir, old_seeds, )
+=======
+def prodigal_cmd(fasta, outdir):
+    outfiles = [os.path.join(outdir, name + "_proteins.fasta"),
+                os.path.join(outdir, "prodigal", name + "_genes.fasta"),
+                os.path.join(outdir, "prodigal", name + ".gbk"),
+                os.path.join(outdir, "prodigal", name + ".scores")]
+    cmd = ("prodigal -a {proteins} -d {genes} "
+               "-i {fasta} -o {genbank} -p meta -s {score}"
+              ).format(proteins=out_files[0],
+                       genes=out_files[1],
+                       fasta=fasta,
+                       genbank=out_files[2],
+                       score=out_files[3])
+    return cmd
+>>>>>>> batch

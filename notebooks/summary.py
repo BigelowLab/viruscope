@@ -65,6 +65,8 @@ def virus_class(vsdf, test_cols = ['viral_phage_gene_fraction','ratio_virus_bact
     clf.fit(in_train, train_label)
     
     test = vsdf[['contig'] + test_cols].dropna()
+    if len(test) == 0:
+        return pd.DataFrame(columns=['contig','virus_class','virus_prob','virus_prob_new'])
     test[test_cols[0]] = np.log10(test[test_cols[0]] + 0.001)
     test[test_cols[1]] = np.log10(test[test_cols[1]] + 0.001)
     try:
@@ -74,10 +76,17 @@ def virus_class(vsdf, test_cols = ['viral_phage_gene_fraction','ratio_virus_bact
         raise inst
     probs = clf.predict_proba(test[test_cols])
     # built in probability function
-    #test['prob 0'] = [i[0] for i in probs]
-    #test['prob 1'] = [i[1] for i in probs]
-    #test['prob_all'] = [l['prob 0'] if l['virus_class'] == 0 else l['prob 1'] for i, l in test.iterrows()]
+    test['prob 0'] = [i[0] for i in probs]
+    test['prob 1'] = [i[1] for i in probs]
+    test['virus_prob_new'] = [l['prob 0'] if l['virus_class'] == 0 else l['prob 1'] for i, l in test.iterrows()]
     
     test['virus_prob'] = _pval_by_count(clf, test, train_in, test_cols, score_col)
     
-    return test[['contig','virus_class','virus_prob']]
+    return test[['contig','virus_class','virus_prob','virus_prob_new']]
+
+
+def merge_all(phage_df, recruit_df, outfile): 
+    merged = recruit_df.merge(phage_df.reset_index(), on='contig', how='outer')
+    result = merged.merge(virus_class(merged), on='contig', how='outer')
+    result.to_csv(outfile, index=False)
+    return result

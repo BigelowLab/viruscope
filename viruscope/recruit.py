@@ -17,10 +17,22 @@ from collections import defaultdict
 from distutils.spawn import find_executable
 import click
 import pandas as pd
-from scgc import readfx
+from pysam import FastxFile
 from viruscope.tools import file_transaction, file_exists
 
+def readfx(fastx):
+    if not file_exists(fastx):
+        logger.critical("File Not Found: %s" % fastx)
+        raise IOError(2, "No such file:", fastx)
 
+    fx = ""
+    try:
+        fx = FastxFile(fastx)
+        for f in fx:
+            yield f.name, f.sequence, f.quality
+    finally:
+        if fx:
+            fx.close()
 
 def read_count(fname):
     """Count the number of reads and write metadata .count file.

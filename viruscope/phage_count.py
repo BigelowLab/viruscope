@@ -1,7 +1,7 @@
 import pandas as pd
 from collections import defaultdict
 import itertools
-from .tools import readfa, swap_cluster_map
+from .tools import readfa
 from .recruit import summarize_by_contig
 
 

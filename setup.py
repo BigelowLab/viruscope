@@ -23,6 +23,7 @@ setup(
     description='',
     long_description=__doc__,
     py_modules=['viruscope'],
+    packages=['viruscope']
     install_requires=[],
     entry_points='''
         [console_scripts]

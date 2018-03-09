@@ -1,6 +1,7 @@
 import pandas as pd
 from collections import defaultdict
 import itertools
+import sys
 from .tools import readfa
 from .recruit import summarize_by_contig
 
@@ -52,8 +53,9 @@ def run_mica(fasta, out, db='/mnt/scgc/simon/databases/mica/nr-20150620-mica', n
                                                       alignments=num_alignments,
                                                       evalue=evalue,
                                                       out=out)
-    print(cmd)
+    print(cmd, file=sys.stderr)
     return cmd
+
 
 def run_blast(fasta, out, db='nr', num_alignments=10,
            evalue=0.001,
@@ -73,8 +75,10 @@ def run_blast(fasta, out, db='nr', num_alignments=10,
                                                       alignments=num_alignments,
                                                       evalue=evalue,
                                                       out=out)
-    print(cmd)
+    print(cmd, file=sys.stderr)
     return cmd
+
+
 
 def id_virus_orfs(micaout,
                   keywords1 = 'phage,virus,prophage,terminase,t4-like,lambda-like,mu-like,capsid,tail,fiber,lambdoid,portal,tail,virion,lysis,podovirus,podo-like,head,baseplate,myovirus,siphovirus,structural',
@@ -111,6 +115,7 @@ def id_virus_orfs(micaout,
                                 'p1':[1 if q in p1_true else 0 for q in list(qseqs)],
                                 'p2':[1 if q in p2_true else 0 for q in list(qseqs)]})
     return newdf
+
 
 def orf_map_fa(fasta):
     names = []

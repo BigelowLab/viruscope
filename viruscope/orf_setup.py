@@ -1,8 +1,12 @@
 import subprocess
 import sys
 import glob
+import os
+from collections import defaultdict
+import itertools
+from pyfaidx import Fasta
 from .tools import (file_transaction, file_exists, safe_makedir, write_fa_record,
-                    tmp_dir)
+                    tmp_dir, readfa)
 
 
 def prodigal(fasta, out_files, verbose=False):
@@ -24,15 +28,15 @@ def prodigal(fasta, out_files, verbose=False):
         subprocess.check_call(cmd, shell=True)
     return out_files
 
-def run_prodigal(f, workingdir = "./"):
+def run_prodigal(f, prod_dir):
 
-    name = op.basename(f).split(".")[0].split("_")[0]
+    name = os.path.basename(f).split(".")[0].split("_")[0]
     outfiles = [os.path.join(prod_dir, name + "_proteins.fasta"),
                 os.path.join(prod_dir, name + "_genes.fasta"),
                 os.path.join(prod_dir, "prodigal", name + ".gbk"),
                 os.path.join(prod_dir, "prodigal", name + ".scores")]
     try:
-        p_proteins, p_genes, p_genbank, p_score = prodigal(c, outfiles, verbose=True)
+        p_proteins, p_genes, p_genbank, p_score = prodigal(f, outfiles, verbose=True)
     except Exception as inst:
         print(inst)
         print('Unable to run prodigal for {}'.format(name))
@@ -40,12 +44,12 @@ def run_prodigal(f, workingdir = "./"):
 
 
 def run_batch_prodigal(falist, workingdir = "./"):
-    prod_dir = op.join(workingdir, 'prodigal')
+    prod_dir = os.path.join(workingdir, 'prodigal')
     safe_makedir(prod_dir)
     out_prots = []
     for f in falist:
         try:
-            p_proteins = run_prodigal(f, workingdir)
+            p_proteins = run_prodigal(f, prod_dir)
         except Exception as inst:
             print(inst)
             continue
@@ -53,9 +57,9 @@ def run_batch_prodigal(falist, workingdir = "./"):
     return out_prots
 
 
-def concat_orfs(orf_dir, outfile='all_orfs.fasta'):
+def concat_orfs(orf_dir, other_fastas = [], outfile='all_orfs.fasta'):
     with open(outfile, "w") as oh:
-        for f in glob.glob(op.join(orf_dir, '*proteins.fasta')):
+        for f in glob.glob(os.path.join(orf_dir, '*proteins.fasta')) + other_fastas:
             with open(f) as ih:
                 for l in ih:
                     print(l.strip(), file=oh)
@@ -133,21 +137,29 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
         return output_files
 
     print("Running CD-HIT on {fa}".format(fa=input_fa), file=sys.stderr)
-
-    with file_transaction(output_files) as tx_out_files:
-        cmd = ("cd-hit -i {input_fasta} -o {output_fasta} -c {c} "
+    # TODO: for some reason, *.clstr file not produced when using file_transaction function. 
+    # it would be better to run it this way if we can figure out what the issue is.
+    #with file_transaction(output_files) as tx_out_files:
+    #    cmd = ("cd-hit -i {input_fasta} -o {output_fasta} -c {c} "
+    #            "-G {G} -b {b} -M {M} -T {T} -n {n} -l {l} -t {t} "
+    #            "-d {d} -s {s} -S {S} -aL {aL} -AL {AL} -aS {aS} "
+    #            "-AS {AS} -A {A} -uL {uL} -uS {uS} -U {U} "
+    #            "-p 1 -g {g} -sc {sc} -sf {sf}").format(input_fasta=input_fa,
+    #                                                    output_fasta=tx_out_files[0],
+    #                                                    **locals())
+    #    subprocess.check_call(cmd, shell=True)
+    cmd = ("cd-hit -i {input_fasta} -o {output_fasta} -c {c} "
                 "-G {G} -b {b} -M {M} -T {T} -n {n} -l {l} -t {t} "
                 "-d {d} -s {s} -S {S} -aL {aL} -AL {AL} -aS {aS} "
                 "-AS {AS} -A {A} -uL {uL} -uS {uS} -U {U} "
-                "-p 1 -g {g} -sc {sc} -sf {sf}").format(input_fasta=tmp_fasta,
-                                                        output_fasta=tx_out_files[0],
+                "-p 1 -g {g} -sc {sc} -sf {sf}").format(input_fasta=input_fa,
+                                                        output_fasta=output_fa,
                                                         **locals())
-        subprocess.check_call(cmd, shell=True)
-
+    subprocess.check_call(cmd, shell=True)
     return output_files
 
 
-def id_added_seeds(clstr, original_seed_fasta):
+def id_added_seeds(clstr, original_seed_fasta = None):
     seeds = set()
     if original_seed_fasta is not None:
         for name, seq in readfa(open(seed_fa)):
@@ -191,19 +203,20 @@ def id_added_seeds(clstr, original_seed_fasta):
                 members.remove(rep_seq)
                 new_seeds.append(rep_seq)
             cluster_map[seed_seq] = members
-    print('there are', len(new_seeds), 'new seeds')
-    print('there are', old_seeds, 'old seeds')
-    print('there are', member_seeds, 'old seeds included in sequence clusters that will serve as the cluster seed')
+    print('there are', len(new_seeds), 'new seeds', file=sys.stderr)
+    print('there are', old_seeds, 'old seeds', file=sys.stderr)
+    print('there are', member_seeds, 'old seeds included in sequence clusters that will serve as the cluster seed', file=sys.stderr)
     return cluster_map, new_seeds
 
 
 def write_cluster_map(cmap, out_map):
     count = 0
     with open(out_map, "w") as oh:
-        for k in cluster_map:
+        for k in cmap:
             print(k, k, sep = "\t", file=oh)
-            for val in cluster_map[k]:
+            for val in cmap[k]:
                 print(val, k, sep="\t", file=oh)
+    return out_map
 
 def read_cluster_map(out_map):
     cmap = {}
@@ -219,9 +232,13 @@ def swap_cluster_map(cm):
         for k in cm[c]: cm_swap[k] = c
     return cm_swap
 
-def write_new_seeds(new_seed_fa, clstr, new_seed_list):
+
+def write_new_seeds(new_seed_fa, clstr_fasta, new_seed_list):
+    if os.path.exists(new_seed_fa):
+        print("new seed fasta file already exists, skipping.", file=sys.stderr)
+        return new_seed_fa
     with open(new_seed_fa, "w") as oh:
-        for name, seq in readfa(open(clstr.replace(".clstr",'.fasta'))):
+        for name, seq in readfa(open(clstr_fasta)):
             if name.split()[0] in new_seed_list:
                 print(">{}".format(name), file=oh)
                 for i in range(0, len(seq), 60):
@@ -231,28 +248,58 @@ def write_new_seeds(new_seed_fa, clstr, new_seed_list):
 
 def cluster_split_fa(fasta, outdir, seq_num=1000, pctid=70):
     with tmp_dir() as tmp:
-        outfasta = op.join(tmp, fasta.replace(".f","_{}.f".format(pctid)))
+        outfasta = os.path.join(tmp, fasta.replace(".f","_{}.f".format(pctid)))
         outfiles = run_cd_hit(fasta, outfasta, c=0.7)
         count = 0
-    fa = Fasta(fasta)
-    number = 0
-    missing = []
+        fa = Fasta(fasta)
+        number = 0
+        missing = []
+        seedout = id_added_seeds(outfiles[1], None)
+        cluster_map = seedout[0]
 
-    for k in cluster_map:
-        seqs = [k] + cluster_map[k]
-        count += len(seqs)
-        with open(op.join(outdir, "subset_{}.fasta".format(number)), "a") as oh:
-            for s in seqs:
-                try:
-                    rec = fa[s]
-                except:
-                    missing.append(s)
-                    continue
+        for k in cluster_map:
+            seqs = [k] + cluster_map[k]
+            count += len(seqs)
+            with open(os.path.join(outdir, "subset_{}.fasta".format(number)), "a") as oh:
+                for s in seqs:
+                    try:
+                        rec = fa[s]
+                    except:
+                        missing.append(s)
+                        continue
 
-                write_fa_record(rec.long_name, str(rec), oh)
+                    write_fa_record(rec.long_name, str(rec), oh)
 
-        if count > 1000:
-            count = 0
-            number += 1
-    print(number, "files created")
+            if count > 1000:
+                count = 0
+                number += 1
+        print(number, "files created", file=sys.stderr)
     return outdir
+
+
+def prep_contigs(falist, wd='./', old_seeds=[]):
+    '''sends sequences through the orf_setup workflow
+    Args:
+        falist (list): list of fasta files to process (expected to be SAG contigs)
+        wd (str): path to the output directory location
+        old_seeds (list): list of fasta files to use as the old seed sequences to be included in contig clustering
+    Returns:
+        str: path to output directory containing clustering results (seed maps, seed fasta files, and fasta files ready for mica).
+    '''
+    clustdir = safe_makedir(op.join(wd, 'clustering'))
+    for_mica = safe_makedir(clustdir, "for_mica")
+    
+    cmap_file = op.join(clustdir,"seed_map90.tsv")
+    new_seeds = op.join(clustdir, "new_seeds.fasta")
+    
+    prods = run_batch_prodigal(falist, wd)
+    all_orfs = concat_orfs(op.join(wd, 'prodigal'), other_fastas=[old_seeds], outfile = op.join(clustdir, "all_orfs.fasta"))
+    cd_hit_out = run_cd_hit(all_orfs, all_orfs.replace(".fasta","_clust90.fasta"), c=0.9, d=0)
+    seedout = id_added_seeds(cd_hit_out[1], old_seeds)
+    out = write_cluster_map(seedout[0], cmap_file)
+    cmap = swap_cluster_map(seedout[0])
+
+    new_seeds = write_new_seeds(new_seeds, cd_hit_out[0], seedout[1])
+    for_mica = cluster_split_fa(new_seeds, for_mica)
+    return clustdir
+

@@ -1,24 +1,15 @@
 from __future__ import print_function
 
-import argparse
-import contextlib
-import fileinput
-import gzip
-import itertools
+
 import os
 import os.path as op
-import shutil
 import subprocess
-import six
 import sys
 import tempfile
-import time
-from collections import defaultdict
-from distutils.spawn import find_executable
-import click
 import pandas as pd
 from pysam import FastxFile
 from viruscope.tools import file_transaction, file_exists
+
 
 def readfx(fastx):
     if not file_exists(fastx):

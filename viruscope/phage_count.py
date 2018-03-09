@@ -1,8 +1,8 @@
 import pandas as pd
 from collections import defaultdict
 import itertools
-from nb_tools import readfa, swap_cluster_map, orf_map_fa
-from recruitment_for_vs import summarize_by_contig
+from .tools import readfa, swap_cluster_map
+from .recruit import summarize_by_contig
 
 
 def map_clstr_raw(clstr, singles=False):

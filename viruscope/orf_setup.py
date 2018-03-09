@@ -1,8 +1,9 @@
 import subprocess
 import sys
 import glob
-from nb_tools import (file_transaction, file_exists, safe_makedir, write_fa_record,
+from .tools import (file_transaction, file_exists, safe_makedir, write_fa_record,
                     tmp_dir)
+
 
 def prodigal(fasta, out_files, verbose=False):
     """Expected order of 4 out_files is proteins, genes, genbank, and score."""

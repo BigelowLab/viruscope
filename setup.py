@@ -18,11 +18,12 @@ setup(
     version=get_version("viruscope.py"),
     url='https://github.com/BigelowLab/viruscope',
     license='',
-    author='Joe Brown, Ben Tupper',
+    author='Joe Brown, Ben Tupper, Julia Brown',
     author_email='jmbrown@bigelow.org',
     description='',
     long_description=__doc__,
     py_modules=['viruscope'],
+    packages=['viruscope'],
     install_requires=[],
     entry_points='''
         [console_scripts]

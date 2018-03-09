@@ -172,14 +172,6 @@ def format_fasta_record(name, seq, wrap=100):
     return record.strip()
 
 
-def swap_cluster_map(cm):
-    cm_swap = {}
-
-    for c in cm:
-        for k in cm[c]: cm_swap[k] = c
-    return cm_swap
-
-
 def write_fa_record(name, seq, oh, line_len=60):
     print(">{}".format(name), file=oh)
     for i in range(0, len(seq), line_len):

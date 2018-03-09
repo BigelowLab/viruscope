@@ -18,103 +18,8 @@ from distutils.spawn import find_executable
 import click
 import pandas as pd
 from scgc import readfx
+from viruscope.tools import file_transaction, file_exists
 
-
-
-@contextlib.contextmanager
-def file_transaction(*rollback_files):
-    """
-    Wrap file generation in a transaction, moving to output if finishes.
-    """
-    safe_names, orig_names = _flatten_plus_safe(rollback_files)
-    # remove any half-finished transactions
-    remove_files(safe_names)
-    try:
-        if len(safe_names) == 1:
-            yield safe_names[0]
-        else:
-            yield tuple(safe_names)
-    # failure -- delete any temporary files
-    except:
-        remove_files(safe_names)
-        remove_tmpdirs(safe_names)
-        raise
-    # worked -- move the temporary files to permanent location
-    else:
-        for safe, orig in zip(safe_names, orig_names):
-            if os.path.exists(safe):
-                shutil.move(safe, orig)
-        remove_tmpdirs(safe_names)
-
-
-def remove_tmpdirs(fnames):
-    for x in fnames:
-        xdir = os.path.dirname(os.path.abspath(x))
-        if xdir and os.path.exists(xdir):
-            shutil.rmtree(xdir, ignore_errors=True)
-
-
-def remove_files(fnames):
-    for x in fnames:
-        if x and os.path.exists(x):
-            if os.path.isfile(x):
-                os.remove(x)
-            elif os.path.isdir(x):
-                shutil.rmtree(x, ignore_errors=True)
-
-
-def _flatten_plus_safe(rollback_files):
-    """
-    Flatten names of files and create temporary file names.
-    """
-    tx_files, orig_files = [], []
-    for fnames in rollback_files:
-        if isinstance(fnames, six.string_types):
-            fnames = [fnames]
-        for fname in fnames:
-            basedir = safe_makedir(os.path.dirname(fname))
-            tmpdir = safe_makedir(tempfile.mkdtemp(dir=basedir))
-            tx_file = os.path.join(tmpdir, os.path.basename(fname))
-            tx_files.append(tx_file)
-            orig_files.append(fname)
-    return tx_files, orig_files
-
-
-def safe_makedir(dname):
-    """
-    Make a directory if it doesn't exist, handling concurrent race conditions.
-    """
-    if not dname:
-        return dname
-    num_tries = 0
-    max_tries = 5
-    while not os.path.exists(dname):
-        try:
-            os.makedirs(dname)
-        except OSError:
-            if num_tries > max_tries:
-                raise
-            num_tries += 1
-            time.sleep(2)
-    return dname
-
-
-def file_exists(fnames):
-    """
-    Check if a file or files exist and are non-empty.
-
-    parameters
-        fnames : file path as string or paths as list; if list, all must exist
-
-    returns
-        boolean
-    """
-    if isinstance(fnames, six.string_types):
-        fnames = [fnames]
-    for f in fnames:
-        if not os.path.exists(f) or os.path.getsize(f) == 0:
-            return False
-    return True
 
 
 def read_count(fname):
@@ -318,26 +223,7 @@ def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
     return out_tbl
 
 
-@click.command(context_settings=dict(help_option_names=['-h', '--help']))
-@click.argument('prot_fasta', nargs=1)
-@click.argument('vir_mg', nargs=1)
-@click.argument('bac_mg', nargs=1)
-@click.option('--sag-contigs',
-             help='location of sag contigs in either fasta or gff format, no output created table created if default of None used',
-             default=None,
-             show_default=True)
-@click.option('--output',
-              default=None,
-              help='directory location to place output files',
-             show_default=True)
-@click.option('--threads',
-              default=8,
-              show_default=True,
-              help='number of cores to run on')
-@click.option('--verbose',
-              default=True,
-             show_default=True)
-def main(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, verbose):
+def run_recruitment(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, verbose):
     '''
 python recruitment_for_vs.py --threads 10 --output /mnt/scgc/simon/simonsproject/bats248_vs/diamond/pergenome/ --sag-contigs /mnt/scgc/simon/simonsproject/bats248_contigs/coassemblies/AG-920/AG-920-P22_contigs.fasta  /mnt/scgc/simon/simonsproject/bats248_vs/prodigal/AG-920-P22_proteins.fasta /mnt/scgc_nfs/ref/viral_dbs/POV.fasta.gz /mnt/scgc_nfs/ref/viral_dbs/LineP-all.fasta.gz
     '''
@@ -370,7 +256,3 @@ python recruitment_for_vs.py --threads 10 --output /mnt/scgc/simon/simonsproject
         out_tbl.to_csv(op.join(output, "{}_mg_diamond_recruitment_tbl.csv".format(fa_name)), sep=",", index=False)
 
     os.remove('{}.dmnd'.format(protein_db))
-
-
-if __name__ =='__main__':
-    main()

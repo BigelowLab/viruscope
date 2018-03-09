@@ -90,3 +90,4 @@ def merge_all(phage_df, recruit_df, outfile):
     result = merged.merge(virus_class(merged), on='contig', how='outer')
     result.to_csv(outfile, index=False)
     return result
+    

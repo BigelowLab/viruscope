@@ -212,6 +212,12 @@ def read_cluster_map(out_map):
             cmap[vec[0]] = vec[1]
     return cmap
 
+def swap_cluster_map(cm):
+    cm_swap = {}
+    for c in cm:
+        for k in cm[c]: cm_swap[k] = c
+    return cm_swap
+
 def write_new_seeds(new_seed_fa, clstr, new_seed_list):
     with open(new_seed_fa, "w") as oh:
         for name, seq in readfa(open(clstr.replace(".clstr",'.fasta'))):
@@ -249,6 +255,3 @@ def cluster_split_fa(fasta, outdir, seq_num=1000, pctid=70):
             number += 1
     print(number, "files created")
     return outdir
-
-
-def process_input_fastas(fa_dir, old_seeds, )

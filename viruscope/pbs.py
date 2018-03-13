@@ -1,8 +1,9 @@
 import glob
-from .phage_count.py import run_mica
+import os.path as op
+from .phage_count import run_mica
 
 
-def write_mica_array_sub(micadir, outdir, out_file=None, subout="./mica.out", queue='scgc-route', threads=20):
+def write_mica_array_sub(micadir, outdir, outfile=None, subout="./mica.out", queue='scgc-route', threads=20):
     fastas = glob.glob(op.join(micadir, "*.fasta"))
     
     mica_cmd = run_mica(op.join(micadir, "subset_${num}.fasta"), op.join(outdir, "subset_${num}.mica"), threads=threads)
@@ -31,10 +32,10 @@ num=$(($PBS_ARRAY_INDEX-1))
 
 {mica_cmd}'''.format(total = len(fastas), queue=queue, subout=subout, threads=threads, mica_cmd=mica_cmd)
     if outfile:
-        with open(outfile, "w"):
-            print(sub)
+        with open(outfile, "w") as oh:
+            print(sub, file=oh)
         
-    return sub
+    return outfile
 
 
 #def write_diamond_array_sub

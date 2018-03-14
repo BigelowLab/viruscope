@@ -15,4 +15,4 @@ from .recruit import (read_count, make_diamond_db, diamond_blastx, diamond_view,
 
 from .summary import (virus_class, merge_all)
 
-from .pbs import write_mica_array_sub
+from .pbs import write_mica_array_sub, write_diamond_array_sub

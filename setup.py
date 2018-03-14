@@ -28,5 +28,6 @@ setup(
     entry_points='''
         [console_scripts]
         viruscope=viruscope:main
+        batch-viruscope=viruscope.__main__:cli
     '''
 )

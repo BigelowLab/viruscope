@@ -2,6 +2,7 @@ import subprocess
 import sys
 import glob
 import os
+import os.path as op
 from collections import defaultdict
 import itertools
 from pyfaidx import Fasta
@@ -33,8 +34,8 @@ def run_prodigal(f, prod_dir):
     name = os.path.basename(f).split(".")[0].split("_")[0]
     outfiles = [os.path.join(prod_dir, name + "_proteins.fasta"),
                 os.path.join(prod_dir, name + "_genes.fasta"),
-                os.path.join(prod_dir, "prodigal", name + ".gbk"),
-                os.path.join(prod_dir, "prodigal", name + ".scores")]
+                os.path.join(prod_dir, name + ".gbk"),
+                os.path.join(prod_dir, name + ".scores")]
     try:
         p_proteins, p_genes, p_genbank, p_score = prodigal(f, outfiles, verbose=True)
     except Exception as inst:
@@ -57,16 +58,19 @@ def run_batch_prodigal(falist, workingdir = "./"):
     return out_prots
 
 
-def concat_orfs(orf_dir, other_fastas = [], outfile='all_orfs.fasta'):
+def concat_orfs(orf_dir, other_fastas=None, outfile='all_orfs.fasta'):
     with open(outfile, "w") as oh:
-        for f in glob.glob(os.path.join(orf_dir, '*proteins.fasta')) + other_fastas:
+        for f in glob.glob(os.path.join(orf_dir, '*proteins.fasta')):
             with open(f) as ih:
-                for l in ih:
-                    print(l.strip(), file=oh)
+                for l in ih: print(l.strip(), file=oh)
+        if other_fastas is not None:
+            for f in other_fastas:
+                with open(f) as ih:
+                    for l in ih: print(l.strip(), file=oh)
     return outfile
 
 
-def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
+def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=5000,
     T=1, n=5, l=10, t=2, d=0, s=0.0, S=999999, aL=0.0, AL=99999999, aS=0.0,
     AS=99999999, A=0, uL=1.0, uS=1.0, U=99999999, g=1, sc=0, sf=0):
     """Run CD-HIT to cluster input FASTA.
@@ -162,7 +166,7 @@ def run_cd_hit(input_fa, output_fa, c=0.9, G=1, b=20, M=800,
 def id_added_seeds(clstr, original_seed_fasta = None):
     seeds = set()
     if original_seed_fasta is not None:
-        for name, seq in readfa(open(seed_fa)):
+        for name, seq in readfa(open(original_seed_fasta)):
             seeds.add(name.split()[0])
 
     cluster_map = defaultdict(list)
@@ -218,9 +222,11 @@ def write_cluster_map(cmap, out_map):
                 print(val, k, sep="\t", file=oh)
     return out_map
 
-def read_cluster_map(out_map):
+def read_cluster_map(map_file):
+    assert op.exists(map_file), "Could not find find map file for ORF clusters within filesystem"
+    
     cmap = {}
-    with open("/mnt/scgc/simon/simonsproject/bats248_vs/clustering/cluster_map.txt") as ih:
+    with open(map_file) as ih:
         for l in ih:
             vec = l.strip().split("\t")
             cmap[vec[0]] = vec[1]
@@ -277,7 +283,7 @@ def cluster_split_fa(fasta, outdir, seq_num=1000, pctid=70):
     return outdir
 
 
-def prep_contigs(falist, wd='./', old_seeds=[]):
+def prep_contigs(falist, wd='./viruscope', old_seeds=None):
     '''sends sequences through the orf_setup workflow
     Args:
         falist (list): list of fasta files to process (expected to be SAG contigs)
@@ -286,8 +292,9 @@ def prep_contigs(falist, wd='./', old_seeds=[]):
     Returns:
         str: path to output directory containing clustering results (seed maps, seed fasta files, and fasta files ready for mica).
     '''
+    wd = safe_makedir(wd)
     clustdir = safe_makedir(op.join(wd, 'clustering'))
-    for_mica = safe_makedir(clustdir, "for_mica")
+    for_mica = safe_makedir(op.join(clustdir, "for_mica"))
     
     cmap_file = op.join(clustdir,"seed_map90.tsv")
     new_seeds = op.join(clustdir, "new_seeds.fasta")

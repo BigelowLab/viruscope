@@ -85,9 +85,36 @@ def virus_class(vsdf, test_cols = ['viral_phage_gene_fraction','ratio_virus_bact
     return test[['contig','virus_class','virus_prob','virus_prob_new']]
 
 
-def merge_all(phage_df, recruit_df, outfile):
+def merge_all(phage_df_loc, recruit_df_loc, outfile, training_file='/mnt/scgc_nfs/opt/viruscope/virus-training.csv'):
+    ''' merge recruitment and phage orf dataframes, calculate probabilities and write to outfile
+    Args:
+    '''
+    phage_df = pd.read_csv(phage_df_loc)
+    recruit_df = pd.read_csv(recruit_df_loc)
     merged = recruit_df.merge(phage_df.reset_index(), on='contig', how='outer')
-    result = merged.merge(virus_class(merged), on='contig', how='outer')
+    result = merged.merge(virus_class(merged, training_file=training_file), on='contig', how='outer')
     result.to_csv(outfile, index=False)
     return result
+ 
     
+def write_batch_summaries(contig_dir, wd, training_file='/mnt/scgc_nfs/opt/viruscope/virus-training.csv'):
+    ''' summarize results and calculate statistics at the end of the viruSCope run.
+    Args:
+        contig_dir(str): path to directory containing contigs in fasta format
+        wd (str): path to viruscope main output directory
+    Returns:
+        path (str): path to directory containing viruscope summary tables
+    '''
+    
+    summary_dir = safe_makedir(op.join(wd, "summary"))
+    contigs = glob.glob(op.join(contig_dir, "*.fa*"))
+    _blast = lambda wd, name: op.join(wd, 'blast', '{}_blast_summary.csv'.format(name))
+    _diamond = lambda wd, name: op.join(wd, 'diamond', '{}_proteins_mg_diamond_recruitment_tbl.csv'.format(name))
+    _summary = lambda wd, name: op.join(wd, 'summary', '{}_summary.csv'.format(name))
+
+    for c in contigs:
+        name = op.basename(c).split(".")[0].split("_")[0]
+        out = merge_all(_blast(wd, name), _diamond(wd, name), _summary(wd, name), training_file=training_file)
+        
+    print("viruscope summary tables written to {}".format(summary_dir), file=sys.stdout)
+    return summary_dir

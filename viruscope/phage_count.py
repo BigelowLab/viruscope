@@ -97,13 +97,17 @@ def id_virus_orfs(micaout,
 
     def search_phrases(string, keylist):
         for i, k in enumerate(keylist):
-            if k in string:
-                return True
-            else:
-                if i == len(keylist)-1:
-                    return False
+            try:
+                if k in string:
+                    return True
                 else:
-                    continue
+                    if i == len(keylist)-1:
+                        return False
+                    else:
+                        continue
+            except Exception as inst:
+                print(inst)
+                break
     cnames = "qseqid sseqid pident length mismatch gapopen qstart qend sstart send evalue bitscore sallseqid score nident positive gaps ppos qframe sframe qseq sseq qlen slen salltitles".split()
     df = pd.read_csv(micaout, sep="\t", names=cnames)
 
@@ -155,3 +159,25 @@ def phage_contig_table(clstr_map, prot_fasta, phage_hits_df, outfile=None):
         csum.to_csv(outfile)
 
     return csum
+
+
+def write_blast_summaries(wd, seed_ids=None):
+    ''' write summary tables for all SAGs in viruscope run
+    Args:
+        wd (str): path to viruscope working directory
+        seed_ids (list): list of files containing seed ids
+    Returns:
+        writes summaries to {wd}/blast/{name}_summary.csv for each {name}_proteins.fasta found in {wd}/prodigal/
+    '''
+    _out_tbl = lambda wd, p: op.join(wd, "blast", "{}_blast_summary.csv".format(op.basename(p).split("_")[0]))
+    
+    clusterdict = read_cluster_map(op.join(wd, 'clustering','seed_map90.tsv'))
+    
+    vdf = pd.concat([id_virus_orfs(i) for i in glob.glob(op.join(wd, 'blast','*.mica')) + glob.glob(wd, 'blast', '*.out')])
+    if seed_ids is not None:
+        svdf = pd.concat([pd.read_csv(i) for i in seed_ids])
+        vdf = pd.concat([vdf, svdf])
+    
+    for p in glob.glob(op.join(wd, 'prodigal',"*_proteins.fasta")):
+        df = phage_contig_table(clusterdict, p, vdf, outfile=_out_tbl(wd, p))
+    

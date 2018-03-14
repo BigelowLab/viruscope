@@ -1,6 +1,5 @@
 from __future__ import print_function
 
-
 import os
 import os.path as op
 import subprocess
@@ -125,16 +124,16 @@ def summarize_by_contig(df, hitscol):
 
 
 def contig_lengths(infile):
-    ''' create a dict with contig names as keys and lengths as values from gff file'''
+    ''' create a dict with contig names as keys and lengths as values from gff or fasta file'''
     outdict = {}
     if "g" in infile.split(".")[-1]:
         filetype = 'gff'
-        print("looks like input contig file is in gff format.")
+        print("looks like input contig file is in gff format.", file=sys.stdout)
     elif "f" in infile.split(".")[-1]:
         filetype = 'fasta'
-        print("looks like input config fiel is in fasta format.")
+        print("looks like input config file is in fasta format.", file=sys.stdout)
     else:
-        raise IOError("can't figure out what kind of file contig file is.  Make sure it's either in fasta or gff format.")
+        raise IOError("can't figure out what kind of file contig file is.  Make sure it's either in fasta or gff format.", file=sys.stderr)
     if filetype == 'gff':
         with open(infile) as ih:
             for l in ih:
@@ -259,3 +258,5 @@ python recruitment_for_vs.py --threads 10 --output /mnt/scgc/simon/simonsproject
         out_tbl.to_csv(op.join(output, "{}_mg_diamond_recruitment_tbl.csv".format(fa_name)), sep=",", index=False)
 
     os.remove('{}.dmnd'.format(protein_db))
+
+    

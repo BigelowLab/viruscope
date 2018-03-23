@@ -3,13 +3,13 @@ import glob
 import os
 import os.path as op
 from collections import Counter
-
-from bisect import bisect_left
+import sys
 import numpy as np
 from sklearn import neighbors
 import pandas as pd
 from math import log
 
+from .tools import safe_makedir
 
 
 
@@ -114,7 +114,14 @@ def write_batch_summaries(contig_dir, wd, training_file='/mnt/scgc_nfs/opt/virus
 
     for c in contigs:
         name = op.basename(c).split(".")[0].split("_")[0]
-        out = merge_all(_blast(wd, name), _diamond(wd, name), _summary(wd, name), training_file=training_file)
+        if op.exists(_summary(wd, name)):
+            continue
+
+        try:
+            out = merge_all(_blast(wd, name), _diamond(wd, name), _summary(wd, name), training_file=training_file)
+        except Exception as inst:
+            print('WARNING, unable to create summary table for {name}: {inst}'.format(name=name, inst=inst), file=sys.stderr)
+            continue
         
     print("viruscope summary tables written to {}".format(summary_dir), file=sys.stdout)
     return summary_dir

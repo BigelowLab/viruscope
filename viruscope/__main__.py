@@ -49,8 +49,8 @@ def cli(obj):
              show_default=True)
 def set_up_clusters(fadir, wd, old_seeds, use_pbs, threads, mem, queue, sub_out, bac_mg, vir_mg):
     wd = tools.safe_makedir(wd)
-    falist = glob.glob(op.join(fadir, "*_*.fasta"))
-    clust_dir = orf_setup.prep_contigs(falist, wd, old_seeds)
+    falist = glob.glob(op.join(fadir, "*.f*a"))
+    clust_dir = orf_setup.prep_contigs(falist, wd, old_seeds, mem=mem, threads=threads)
     
     if use_pbs:
         micadir = op.join(clust_dir, 'for_mica')
@@ -67,7 +67,7 @@ def set_up_clusters(fadir, wd, old_seeds, use_pbs, threads, mem, queue, sub_out,
             mica_sub_out = op.join(sub_out, 'mica_pbs_sub.out')
             diamond_sub_out = op.join(sub_out, 'diamond_pbs_sub.out')
         
-        mica_sub = pbs.write_mica_array_sub(micadir, 
+        mica_sub = pbs.write_blast_array_sub(micadir, 
                                             outdir, 
                                             outfile=mica_outfile, 
                                             subout=mica_sub_out,
@@ -79,7 +79,6 @@ def set_up_clusters(fadir, wd, old_seeds, use_pbs, threads, mem, queue, sub_out,
                                 
         print('PBS array submission script for diamond written to {}'.format(diamond_sub), file=sys.stderr)
         
-
 
 @cli.command('recruit-single', short_help='run diamond recruitment of vir and bac mgs against SAG')
 @click.argument('prot-fasta', nargs=1)
@@ -104,6 +103,43 @@ def recruit_single(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, ver
     recruit.run_recruitment(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, verbose)
     
 
+@cli.command('blast', short_help='run blast of one sag')
+@click.argument('infile', nargs=1)
+@click.argument('outfile', nargs=1)
+@click.option('--mica',
+             is_flag=True,
+             help='use mica instead of BLAST to accelerate speed of processing')
+@click.option('--threads',
+              default=5,
+              show_default=True,
+              help='number of threads')
+@click.option('--database',
+              default=None,
+              help='designate location of BLAST or mica database, if not specified, system defaults used')
+def run_blast(infile, outfile, mica=True, threads=5, database=None):
+    ''' run a single blast for viruscope
+    Args:
+        infile (str): path to input file
+        outfile (str): where to write results to
+        mica (bool): should mica be used for the blast step?
+        treads (int): threads to use during blast
+    Returns:
+        writes blast results to outfile
+    '''
+    if mica:
+        if database is not None:
+            cmd = run_mica(infile, outfile, threads=threads, database=database)
+        else:
+            cmd = run_mica(infile, outfile, threads=threads)
+    else:
+        if database is not None:
+            cmd = run_blast(infile, outfile, threads=threads, database=database)
+        else:
+            cmd = run_blast(infile, outfile, threads=threads)
+    subprocess.check_call(cmd, shell=True)
+    
+    
+    
 @cli.command('summarize', short_help='summarize results of diamond and mica, create viruscope summary statistic')
 @click.argument('contig-dir', nargs=1)
 @click.argument('wd', nargs=1)

@@ -173,11 +173,10 @@ def write_blast_summaries(wd, seed_ids=None):
     
     clusterdict = read_cluster_map(op.join(wd, 'clustering','seed_map90.tsv'))
     
-    vdf = pd.concat([id_virus_orfs(i) for i in glob.glob(op.join(wd, 'blast','*.mica')) + glob.glob(wd, 'blast', '*.out')])
+    vdf = pd.concat([id_virus_orfs(i) for i in glob.glob(op.join(wd, 'blast','*.mica')) + glob.glob(op.join(wd, 'blast', '*.out'))])
     if seed_ids is not None:
-        svdf = pd.concat([pd.read_csv(i) for i in seed_ids])
+        svdf = pd.concat([pd.read_csv(i) for i in list(seed_ids)])
         vdf = pd.concat([vdf, svdf])
     
     for p in glob.glob(op.join(wd, 'prodigal',"*_proteins.fasta")):
         df = phage_contig_table(clusterdict, p, vdf, outfile=_out_tbl(wd, p))
-    

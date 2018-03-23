@@ -17,7 +17,7 @@ def cli(obj):
 @cli.command('orf-setup', short_help='set up orf clusters for viruSCope')
 @click.argument('fadir', nargs=1)
 @click.argument('wd', nargs=1)
-@click.option('--old-seeds', 
+@click.option('--old-seeds',
               help='list of fasta files containing previously used seeds',
               default = None,
               show_default=True)
@@ -51,34 +51,34 @@ def set_up_clusters(fadir, wd, old_seeds, use_pbs, threads, mem, queue, sub_out,
     wd = tools.safe_makedir(wd)
     falist = glob.glob(op.join(fadir, "*.f*a"))
     clust_dir = orf_setup.prep_contigs(falist, wd, old_seeds, mem=mem, threads=threads)
-    
+
     if use_pbs:
         micadir = op.join(clust_dir, 'for_mica')
         assert op.exists(micadir), 'could not find the directory containing new seeds for mica'
-        
+
         outdir = tools.safe_makedir(op.join(wd, 'blast'))
         mica_outfile = op.join(wd, 'mica_pbs_sub.sh')
         diamond_outfile = op.join(wd, 'diamond_pbs_sub.sh')
-        
+
         if sub_out is None:
             mica_sub_out = op.join(wd, 'mica_pbs_sub.out')
             diamond_sub_out = op.join(wd, 'diamond_pbs_sub.out')
         else:
             mica_sub_out = op.join(sub_out, 'mica_pbs_sub.out')
             diamond_sub_out = op.join(sub_out, 'diamond_pbs_sub.out')
-        
-        mica_sub = pbs.write_blast_array_sub(micadir, 
-                                            outdir, 
-                                            outfile=mica_outfile, 
+
+        mica_sub = pbs.write_blast_array_sub(micadir,
+                                            outdir,
+                                            outfile=mica_outfile,
                                             subout=mica_sub_out,
-                                            queue=queue, 
+                                            queue=queue,
                                             threads=threads)
-        diamond_sub = pbs.write_diamond_array_sub(fadir, wd, subout=diamond_sub_out, queue=queue, threads=threads, 
+        diamond_sub = pbs.write_diamond_array_sub(fadir, wd, subout=diamond_sub_out, queue=queue, threads=threads,
                                                   outfile=diamond_outfile, bac_mg=bac_mg, vir_mg=vir_mg)
         print('PBS array submission script for mica written to {}'.format(mica_sub), file=sys.stderr)
-                                
+
         print('PBS array submission script for diamond written to {}'.format(diamond_sub), file=sys.stderr)
-        
+
 
 @cli.command('recruit-single', short_help='run diamond recruitment of vir and bac mgs against SAG')
 @click.argument('prot-fasta', nargs=1)
@@ -101,7 +101,7 @@ def set_up_clusters(fadir, wd, old_seeds, use_pbs, threads, mem, queue, sub_out,
              show_default=True)
 def recruit_single(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, verbose):
     recruit.run_recruitment(prot_fasta, vir_mg, bac_mg, sag_contigs, output, threads, verbose)
-    
+
 
 @cli.command('blast', short_help='run blast of one sag')
 @click.argument('infile', nargs=1)
@@ -126,6 +126,9 @@ def run_blast(infile, outfile, mica=True, threads=5, database=None):
     Returns:
         writes blast results to outfile
     '''
+    if op.exists(outfile):
+        return outfile
+        
     if mica:
         if database is not None:
             cmd = run_mica(infile, outfile, threads=threads, database=database)
@@ -137,9 +140,9 @@ def run_blast(infile, outfile, mica=True, threads=5, database=None):
         else:
             cmd = run_blast(infile, outfile, threads=threads)
     subprocess.check_call(cmd, shell=True)
-    
-    
-    
+
+
+
 @cli.command('summarize', short_help='summarize results of diamond and mica, create viruscope summary statistic')
 @click.argument('contig-dir', nargs=1)
 @click.argument('wd', nargs=1)
@@ -150,7 +153,7 @@ def run_blast(infile, outfile, mica=True, threads=5, database=None):
 def summarize_results(contig_dir, wd, seed_classifications, training_file):
     phage_count.write_blast_summaries(wd, seed_classifications)
     summary.write_batch_summaries(contig_dir, wd, training_file=training_file)
-    
+
 
 if __name__=='__main__':
     cli()

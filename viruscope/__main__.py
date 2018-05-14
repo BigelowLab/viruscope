@@ -3,6 +3,7 @@ import sys
 import os.path as op
 import os
 import glob
+import subprocess
 from viruscope import recruit, orf_setup, phage_count, summary, tools, pbs
 
 
@@ -128,18 +129,19 @@ def run_blast(infile, outfile, mica=True, threads=5, database=None):
     '''
     if op.exists(outfile):
         return outfile
-        
-    if mica:
-        if database is not None:
-            cmd = run_mica(infile, outfile, threads=threads, database=database)
+    with tools.file_transaction(outfile) as tx_out_file:
+        if mica:
+            if database is not None:
+                cmd = phage_count.run_mica(infile, tx_out_file, threads=threads, database=database)
+            else:
+                cmd = phage_count.run_mica(infile, tx_out_file, threads=threads)
         else:
-            cmd = run_mica(infile, outfile, threads=threads)
-    else:
-        if database is not None:
-            cmd = run_blast(infile, outfile, threads=threads, database=database)
-        else:
-            cmd = run_blast(infile, outfile, threads=threads)
-    subprocess.check_call(cmd, shell=True)
+            if database is not None:
+                cmd = phage_count.run_blast(infile, tx_out_file, threads=threads, database=database)
+            else:
+                cmd = phage_count.run_blast(infile, tx_out_file, threads=threads)
+
+        subprocess.check_call(cmd, shell=True)
 
 
 
@@ -150,9 +152,13 @@ def run_blast(infile, outfile, mica=True, threads=5, database=None):
 @click.option('--training-file', help='location of training file for knn classifier',
               default='/mnt/scgc_nfs/opt/viruscope/virus-training.csv',
               show_default=True)
-def summarize_results(contig_dir, wd, seed_classifications, training_file):
-    phage_count.write_blast_summaries(wd, seed_classifications)
-    summary.write_batch_summaries(contig_dir, wd, training_file=training_file)
+@click.option('--summary-only', default=False, nargs=1, show_default=True)
+def summarize_results(contig_dir, wd, seed_classifications, training_file, summary_only):
+    if summary_only:
+        summary.write_batch_summaries(contig_dir, wd, training_file=training_file)
+    else:
+        phage_count.write_blast_summaries(wd, seed_classifications)
+        summary.write_batch_summaries(contig_dir, wd, training_file=training_file)
 
 
 if __name__=='__main__':

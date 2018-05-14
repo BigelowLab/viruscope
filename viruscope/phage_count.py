@@ -2,8 +2,11 @@ import pandas as pd
 from collections import defaultdict
 import itertools
 import sys
+import glob
+import os.path as op
 from .tools import readfa
 from .recruit import summarize_by_contig
+from .orf_setup import read_cluster_map
 
 
 def map_clstr_raw(clstr, singles=False):
@@ -63,8 +66,8 @@ def run_blast(fasta, out, db='nr', num_alignments=10,
                   "gapopen", "qstart", "qend", "sstart", "send", "evalue",
                   "bitscore", "sallseqid", "score", "nident", "positive",
                   "gaps", "ppos", "qframe", "sframe", "qseq", "sseq", "qlen",
-                  "slen", "salltitles"]):
-    cmd = ("blastp -db {db} -query {query} -outfmt "
+                  "slen", "salltitles"], blasttype='blastp'):
+    cmd = ("{blasttype} -db {db} -query {query} -outfmt "
                    "'6 {fields}' "
                    "-num_threads {threads} "
                    "-num_alignments {alignments} "
@@ -74,7 +77,8 @@ def run_blast(fasta, out, db='nr', num_alignments=10,
                                                       threads=threads,
                                                       alignments=num_alignments,
                                                       evalue=evalue,
-                                                      out=out)
+                                                      out=out,
+                                                      blasttype=blasttype)
     print(cmd, file=sys.stderr)
     return cmd
 
@@ -170,13 +174,21 @@ def write_blast_summaries(wd, seed_ids=None):
         writes summaries to {wd}/blast/{name}_summary.csv for each {name}_proteins.fasta found in {wd}/prodigal/
     '''
     _out_tbl = lambda wd, p: op.join(wd, "blast", "{}_blast_summary.csv".format(op.basename(p).split("_")[0]))
-    
+
     clusterdict = read_cluster_map(op.join(wd, 'clustering','seed_map90.tsv'))
-    
+
     vdf = pd.concat([id_virus_orfs(i) for i in glob.glob(op.join(wd, 'blast','*.mica')) + glob.glob(op.join(wd, 'blast', '*.out'))])
     if seed_ids is not None:
-        svdf = pd.concat([pd.read_csv(i) for i in list(seed_ids)])
+        if type(seed_ids) == str:
+            svdf = pd.read_csv(seed_ids)
+        elif type(seed_ids) == list:
+            svdf = pd.concat([pd.read_csv(i) for i in list(seed_ids)])
         vdf = pd.concat([vdf, svdf])
-    
+
     for p in glob.glob(op.join(wd, 'prodigal',"*_proteins.fasta")):
-        df = phage_contig_table(clusterdict, p, vdf, outfile=_out_tbl(wd, p))
+        if op.exists(_out_tbl(wd, p)):
+            print('out tbl {tbl} already exists! '.format(tbl = _out_tbl(wd, p)), file = sys.stdout)
+        else:
+            df = phage_contig_table(clusterdict, p, vdf, outfile=_out_tbl(wd, p))
+
+            

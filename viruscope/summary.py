@@ -95,8 +95,8 @@ def merge_all(phage_df_loc, recruit_df_loc, outfile, training_file='/mnt/scgc_nf
     result = merged.merge(virus_class(merged, training_file=training_file), on='contig', how='outer')
     result.to_csv(outfile, index=False)
     return result
- 
-    
+
+
 def write_batch_summaries(contig_dir, wd, training_file='/mnt/scgc_nfs/opt/viruscope/virus-training.csv'):
     ''' summarize results and calculate statistics at the end of the viruSCope run.
     Args:
@@ -105,9 +105,9 @@ def write_batch_summaries(contig_dir, wd, training_file='/mnt/scgc_nfs/opt/virus
     Returns:
         path (str): path to directory containing viruscope summary tables
     '''
-    
+
     summary_dir = safe_makedir(op.join(wd, "summary"))
-    contigs = glob.glob(op.join(contig_dir, "*.fa*"))
+    contigs = glob.glob(op.join(contig_dir, "*.f*"))
     _blast = lambda wd, name: op.join(wd, 'blast', '{}_blast_summary.csv'.format(name))
     _diamond = lambda wd, name: op.join(wd, 'diamond', '{}_proteins_mg_diamond_recruitment_tbl.csv'.format(name))
     _summary = lambda wd, name: op.join(wd, 'summary', '{}_summary.csv'.format(name))
@@ -115,13 +115,14 @@ def write_batch_summaries(contig_dir, wd, training_file='/mnt/scgc_nfs/opt/virus
     for c in contigs:
         name = op.basename(c).split(".")[0].split("_")[0]
         if op.exists(_summary(wd, name)):
+            print(_summary(wd, name), "exists!  Skipping.", file=sys.stdout)
             continue
 
         try:
             out = merge_all(_blast(wd, name), _diamond(wd, name), _summary(wd, name), training_file=training_file)
         except Exception as inst:
-            print('WARNING, unable to create summary table for {name}: {inst}'.format(name=name, inst=inst), file=sys.stderr)
+            print('WARNING, unable to create summary table for {name}: {inst}'.format(name=name, inst=inst), file=sys.stdout)
             continue
-        
+
     print("viruscope summary tables written to {}".format(summary_dir), file=sys.stdout)
     return summary_dir

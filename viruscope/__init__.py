@@ -13,6 +13,6 @@ from .recruit import (read_count, make_diamond_db, diamond_blastx, diamond_view,
     summarize_by_contig, contig_lengths, compute_fr, orf_map, map_orfs_to_contigs,
     construct_recruit_tbl, run_recruitment)
 
-from .summary import (virus_class, merge_all)
+from .summary import (virus_class, merge_all, write_batch_summaries)
 
 from .pbs import write_blast_array_sub, write_diamond_array_sub

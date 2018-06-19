@@ -129,6 +129,7 @@ def run_blast(infile, outfile, mica=True, threads=5, database=None):
     '''
     if op.exists(outfile):
         return outfile
+    
     with tools.file_transaction(outfile) as tx_out_file:
         if mica:
             if database is not None:

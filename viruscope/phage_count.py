@@ -178,6 +178,7 @@ def write_blast_summaries(wd, seed_ids=None):
     clusterdict = read_cluster_map(op.join(wd, 'clustering','seed_map90.tsv'))
 
     vdf = pd.concat([id_virus_orfs(i) for i in glob.glob(op.join(wd, 'blast','*.mica')) + glob.glob(op.join(wd, 'blast', '*.out'))])
+    vdf.to_csv(op.join(wd, "vir_seeds.csv"), index=False)
     if seed_ids is not None:
         if type(seed_ids) == str:
             svdf = pd.read_csv(seed_ids)
@@ -190,5 +191,3 @@ def write_blast_summaries(wd, seed_ids=None):
             print('out tbl {tbl} already exists! '.format(tbl = _out_tbl(wd, p)), file = sys.stdout)
         else:
             df = phage_contig_table(clusterdict, p, vdf, outfile=_out_tbl(wd, p))
-
-            

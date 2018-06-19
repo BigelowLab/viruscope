@@ -158,7 +158,7 @@ def compute_fr(tbl, clens, mult=1e6):
         pandas DataFrame with mg_fr values calculated
     '''
 
-    clen_tbl = pd.DataFrame(data={'contig_length':float(clens[i] for i in clens.keys()], 'contig':clens.keys())
+    clen_tbl = pd.DataFrame(data={'contig_length':[float(clens[i]) for i in clens.keys()], 'contig':clens.keys())
     tbl = tbl.merge(clen_tbl, on='contig', how='outer')
 
     hits_cols = [i for i in tbl.columns if 'hit' in i]

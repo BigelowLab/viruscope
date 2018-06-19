@@ -158,7 +158,8 @@ def compute_fr(tbl, clens, mult=1e6):
         pandas DataFrame with mg_fr values calculated
     '''
 
-    tbl['contig_length'] = [float(clens[i]) for i in tbl['contig']]
+    clen_tbl = pd.DataFrame(data={'contig_length':float(clens[i] for i in clens.keys()], 'contig':clens.keys())
+    tbl = tbl.merge(clen_tbl, on='contig', how='outer')
 
     hits_cols = [i for i in tbl.columns if 'hit' in i]
     count_cols = ["_".join(["reads",i.split("_")[1]]) for i in hits_cols]
@@ -258,5 +259,3 @@ python recruitment_for_vs.py --threads 10 --output /mnt/scgc/simon/simonsproject
         out_tbl.to_csv(op.join(output, "{}_mg_diamond_recruitment_tbl.csv".format(fa_name)), sep=",", index=False)
 
     os.remove('{}.dmnd'.format(protein_db))
-
-    

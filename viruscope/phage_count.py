@@ -184,6 +184,7 @@ def write_blast_summaries(wd, seed_ids=None):
             svdf = pd.read_csv(seed_ids)
         elif type(seed_ids) == list:
             svdf = pd.concat([pd.read_csv(i) for i in list(seed_ids)])
+        svdf[['p1','p2']] = svdf[['p1','p2']].apply(pd.to_numeric, errors='coerce')
         vdf = pd.concat([vdf, svdf])
 
     for p in glob.glob(op.join(wd, 'prodigal',"*_proteins.fasta")):

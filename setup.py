@@ -24,7 +24,12 @@ setup(
     long_description=__doc__,
     py_modules=['viruscope'],
     packages=['viruscope'],
-    install_requires=[],
+    install_requires=['pandas',
+                     'click',
+                     'pyfaidx',
+                     'pysam',
+                     'sklearn',
+                     ],
     entry_points='''
         [console_scripts]
         viruscope=viruscope:main

@@ -8,6 +8,7 @@ import tempfile
 import pandas as pd
 from pysam import FastxFile
 from viruscope.tools import file_transaction, file_exists
+import math
 
 
 def readfx(fastx):
@@ -192,6 +193,14 @@ def map_orfs_to_contigs(df, contig_file):
         df['contig'] = ["_".join(i.split("_")[:-1]) for i in df['orf']]
         return df
 
+def recruit_category(l):
+    if (l['hit_mg-bac'] > 50) | (l['hit_mg-vir'] > 50):
+        if l['fr_mg-vir'] > l['fr_mg-bac']:
+            return 'vir'
+        else:
+            return 'bac'
+    else:
+        return 'low recruitment'
 
 def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
     '''
@@ -221,8 +230,9 @@ def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
 
     out_tbl = compute_fr(chits.reset_index(), clens, mult=1e6)
     out_tbl['ratio_virus_bacteria'] = out_tbl['fr_mg-vir'] / out_tbl['fr_mg-bac']
-    out_tbl['ratio_virus_bacteria'] = [1000 if i == float('inf') else i for i in out_tbl['ratio_virus_bacteria']]
-
+    out_tbl['ratio_virus_bacteria'] = [math.nan if i == float('inf') else i for i in out_tbl['ratio_virus_bacteria']]
+    out_tbl['recruit_category'] = [recruit_category(l) for i, l in out_tbl.iterrows()]
+    
     return out_tbl
 
 

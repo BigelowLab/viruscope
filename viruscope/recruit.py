@@ -219,7 +219,7 @@ def construct_recruit_tbl(vir_tsv, bac_tsv, read_count_dict, contig_file):
     bac_sum = pd.Series(bac_df.groupby('sseqid')['qseqid'].count(), name='hit_mg-bac')
     vir_sum = pd.Series(vir_df.groupby('sseqid')['qseqid'].count(), name='hit_mg-vir')
 
-    orfhits = pd.concat([bac_sum, vir_sum], axis=1).reset_index().rename(columns={'index':'orf'})
+    orfhits = pd.concat([bac_sum, vir_sum], axis=1).reset_index().rename(columns={'index':'orf','sseqid':'orf'})
     orfhits = map_orfs_to_contigs(orfhits, contig_file)
 
     chits = pd.concat([summarize_by_contig(orfhits, 'hit_mg-bac'), summarize_by_contig(orfhits, 'hit_mg-vir')], axis=1)

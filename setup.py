@@ -18,14 +18,21 @@ setup(
     version=get_version("viruscope.py"),
     url='https://github.com/BigelowLab/viruscope',
     license='',
-    author='Joe Brown, Ben Tupper',
+    author='Joe Brown, Ben Tupper, Julia Brown',
     author_email='jmbrown@bigelow.org',
     description='',
     long_description=__doc__,
     py_modules=['viruscope'],
-    install_requires=[],
+    packages=['viruscope'],
+    install_requires=['pandas',
+                     'click',
+                     'pyfaidx',
+                     'pysam',
+                     'sklearn',
+                     ],
     entry_points='''
         [console_scripts]
         viruscope=viruscope:main
+        batch-viruscope=viruscope.__main__:cli
     '''
 )

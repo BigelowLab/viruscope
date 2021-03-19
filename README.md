@@ -134,21 +134,21 @@ command:
 ## Output Summary Table
 The output summary table contains the following columns:
 
-'contig' -- contig ID as reflected in the input contig fasta file
-'hit_mg-bac' -- number of reads aligned from the bacterial metagenome
-'hit_mg-vir' -- number of reads aligned from the viral metagenome
-'reads_mg-vir' -- total reads in viral metagenome
-'reads_mg-bac' -- total reads in bacterial metagenome
-'contig_length' -- length of contig
-'fr_mg-bac' -- normalized fraction of bacterial metagenome hitting contig
-'fr_mg-vir' -- normalized fraction of viral metagenome hitting contig
-'ratio_virus_bacteria' -- metagenomic virus to bacteria ratio
-'recruit_category' -- what metagenome was more represented on the contig ... really it's a flag to not necessarily trust the 'ratio_virus_bacteria' if recruitment is low
-'p1' -- number of ORFs that resemble phage genes on contig
-'p2' -- number of ORFs that resemble added prophage genes
-'total_orfs' -- total ORFs on contig
-'viral_phage_gene_fraction' -- fraction of ORFs on contig that resemble phage genes
-'viral2_phage_gene_fraction' -- fraction of ORFs on contig that resemble added prophage genes
-'virus_class' -- 1 if contig appears to be viral, 0 if not
-'virus_prob' -- probability that the virus class call is correct
-'virus_prob_new' -- slightly different probability score 
+'contig' -- contig ID as reflected in the input contig fasta file  
+'hit_mg-bac' -- number of reads aligned from the bacterial metagenome  
+'hit_mg-vir' -- number of reads aligned from the viral metagenome  
+'reads_mg-vir' -- total reads in viral metagenome  
+'reads_mg-bac' -- total reads in bacterial metagenome  
+'contig_length' -- length of contig  
+'fr_mg-bac' -- normalized fraction of bacterial metagenome hitting contig  
+'fr_mg-vir' -- normalized fraction of viral metagenome hitting contig  
+'ratio_virus_bacteria' -- metagenomic virus to bacteria ratio  
+'recruit_category' -- what metagenome was more represented on the contig ... really it's a flag to not necessarily trust the 'ratio_virus_bacteria' if recruitment is low  
+'p1' -- number of ORFs that resemble phage genes on contig  
+'p2' -- number of ORFs that resemble added prophage genes  
+'total_orfs' -- total ORFs on contig  
+'viral_phage_gene_fraction' -- fraction of ORFs on contig that resemble phage genes  
+'viral2_phage_gene_fraction' -- fraction of ORFs on contig that resemble added prophage genes  
+'virus_class' -- 1 if contig appears to be viral, 0 if not  
+'virus_prob' -- probability that the virus class call is correct  
+'virus_prob_new' -- slightly different probability score   

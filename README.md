@@ -105,7 +105,7 @@ positional arguments:
 
 ## Batch mode
 
-Batch mode involves running several different scripts.  This workflow is a little less developed, and requires manually triggering several different workflows.  Instructions on how to run this are still in development.
+Batch mode involves running several different scripts.  This workflow is in development and currently requires manually triggering several different components.
 
 #### ORF setup
 command:
@@ -126,7 +126,7 @@ Viral and bacterial metagenomic reads are recruited to each genome invidivually.
 ```batch-viruscope recruit-single --threads {# threads} --output {viruscope_dir}/diamond/ --sag-contigs {path_to_genomic_contigs} {path_to_prokka_generated_proteins} {path_to_virus_db} {path_to_bac_db}```
 
 #### Summarise Results
-Takes results of comparison to NR and metagenomic read recruitments and compares to a training set of viral sequences via kmeans clustering, returns ID as viral or not viral with summary statistic.
+Takes results of comparison to NR and metagenomic read recruitments and compares to a training set of viral sequences via kmeans clustering, returns ID as viral or not viral with a summary statistic.
 
 command:
 ```batch-viruscope summarize {directory_containing_input_genomes} {directory_containing_viruscope_results}```

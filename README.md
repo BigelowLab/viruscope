@@ -105,7 +105,7 @@ positional arguments:
 
 ## Batch mode
 
-Batch mode involves running several different scripts.  This workflow is in development and currently requires manually triggering several different components.
+This workflow is functional, but currently requires manually triggering several different components.  Documentation of this workflow is still in development, but you can find a rough outline below.
 
 #### ORF setup
 command:
@@ -118,7 +118,7 @@ Clustered ORFs are separated into files containing 1000 ORFs each, to be compare
 
 This step takes clustered ORFs, and compares them to NCBI's nr database using either BLAST or mica, a BLAST accellorator.  This is designed to be used with a job scheduler, so that each sub-set of clustered ORFS may be submitted separately to speed up the process step.  The command for each ORF file is:
 
-```batch-viruscope blast viruscope_outdir/clustering/for_mica/subset_XX.fasta --mica --threads {threads}```
+```batch-viruscope blast viruscope_outdir/clustering/for_mica/subset_XX.fasta --threads {threads}```
 
 #### Recruitment of microbial and viral metagenomic reads to each input genome using Diamond
 Viral and bacterial metagenomic reads are recruited to each genome invidivually.  This step is also designed to be used with a job scheduler for parallellization.  The command for each individual genome is:
